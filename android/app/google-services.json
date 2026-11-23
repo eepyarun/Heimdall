@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "722078185180",
+    "project_id": "heimdall-50c68",
+    "storage_bucket": "heimdall-50c68.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:722078185180:android:fed6f0ffa9ebe09fc22619",
+        "android_client_info": {
+          "package_name": "dev.heimdall.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXrj-X9CUB_Ht8AZ-rwM0jCFK-ixV5g1M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

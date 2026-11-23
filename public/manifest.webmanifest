@@ -1,0 +1,16 @@
+{
+  "name": "Heimdall: eyes for everyone",
+  "short_name": "Heimdall",
+  "description": "Point your camera and hear what's there. Describe, read, identify and translate, privately on your device first.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0d12",
+  "theme_color": "#0b0d12",
+  "categories": ["accessibility", "utilities"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

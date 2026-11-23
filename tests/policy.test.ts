@@ -1,0 +1,55 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { chooseRoute, PrivateModeUnavailable, shouldEscalate, normalizeConfidence, isBusyError, modelChain } from '../src/lib/policy.ts';
+
+test('busy, quota, and retired-model errors are retried; auth errors are not', () => {
+  assert.ok(isBusyError(new Error('[500 ] This model is currently experiencing high demand.')));
+  assert.ok(isBusyError(new Error('GenerateRequestsPerDayPerProjectPerModel-FreeTier quota exceeded')));
+  assert.ok(isBusyError(new Error('gemini-2.5-flash is no longer available to new users')));
+  assert.ok(!isBusyError(new Error('[401 ] Firebase App Check token is invalid.')));
+});
+
+test('model chain retries the chosen model once, then each backup once without duplicates', () => {
+  assert.deepEqual(modelChain('lite', ['flash', 'old', 'lite', '']), ['lite', 'lite', 'flash', 'old']);
+});
+
+const base = { mode: 'describe' as const, lang: 'en', onDeviceLanguages: ['en', 'es', 'ja'], languageName: 'English' };
+
+test('private mode refuses instead of silently using the cloud when there is no on-device model', () => {
+  assert.throws(() => chooseRoute({ ...base, privacy: 'private', deviceReady: false }), PrivateModeUnavailable);
+  assert.equal(chooseRoute({ ...base, privacy: 'private', deviceReady: true }).mode, 'only_on_device');
+});
+
+test('smart mode prefers on-device, but routes unsupported languages to the cloud', () => {
+  assert.equal(chooseRoute({ ...base, privacy: 'smart', deviceReady: true }).mode, 'prefer_on_device');
+  const hindi = chooseRoute({ ...base, privacy: 'smart', deviceReady: true, lang: 'hi', languageName: 'Hindi' });
+  assert.equal(hindi.mode, 'prefer_in_cloud');
+  assert.match(hindi.why, /Hindi/);
+});
+
+test('best-quality mode prefers the cloud', () => {
+  assert.equal(chooseRoute({ ...base, privacy: 'quality', deviceReady: true }).mode, 'prefer_in_cloud');
+});
+
+const esc = { privacy: 'smart' as const, answeredOnDevice: true, escalateAt: 'low' as const, escalateMedicineAt: 'medium' as const };
+
+test('unsure on-device answers are double-checked in the cloud', () => {
+  assert.equal(shouldEscalate({ ...esc, confidence: 'low' }), true);
+  assert.equal(shouldEscalate({ ...esc, confidence: 'medium' }), false);
+  assert.equal(shouldEscalate({ ...esc, confidence: 'high' }), false);
+});
+
+test('medicine uses a stricter bar', () => {
+  assert.equal(shouldEscalate({ ...esc, confidence: 'medium', category: 'medicine' }), true);
+  assert.equal(shouldEscalate({ ...esc, confidence: 'high', category: 'medicine' }), false);
+});
+
+test('never escalates in private mode or when the cloud already answered', () => {
+  assert.equal(shouldEscalate({ ...esc, privacy: 'private', confidence: 'low' }), false);
+  assert.equal(shouldEscalate({ ...esc, answeredOnDevice: false, confidence: 'low' }), false);
+});
+
+test('unknown confidence is treated as low', () => {
+  assert.equal(normalizeConfidence('certain'), 'low');
+  assert.equal(normalizeConfidence(undefined), 'low');
+});

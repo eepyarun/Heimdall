@@ -1,0 +1,34 @@
+{
+  "parameters": {
+    "cloud_model": {
+      "defaultValue": { "value": "gemini-3.5-flash-lite" },
+      "description": "Cloud fallback model for everyday requests",
+      "valueType": "STRING"
+    },
+    "verify_model": {
+      "defaultValue": { "value": "gemini-3.8-flash" },
+      "description": "Stronger cloud model used to double-check unsure on-device answers",
+      "valueType": "STRING"
+    },
+    "backup_models": {
+      "defaultValue": { "value": "gemini-3.5-flash,gemini-3.5-flash-lite" },
+      "description": "Comma-separated models tried in order when the chosen cloud model is overloaded or out of quota",
+      "valueType": "STRING"
+    },
+    "escalate_at": {
+      "defaultValue": { "value": "low" },
+      "description": "Smart mode: on-device answers at or below this confidence (low|medium) are double-checked in the cloud",
+      "valueType": "STRING"
+    },
+    "escalate_medicine_at": {
+      "defaultValue": { "value": "medium" },
+      "description": "Stricter escalation threshold for medicine (low|medium)",
+      "valueType": "STRING"
+    },
+    "on_device_languages": {
+      "defaultValue": { "value": "en,es,ja" },
+      "description": "Output languages Gemini Nano supports on web; others route to the cloud",
+      "valueType": "STRING"
+    }
+  }
+}

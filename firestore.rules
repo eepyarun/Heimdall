@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // "My things": each user can only read and write their own text-only saved items.
+    match /users/{uid}/items/{itemId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['id', 'name', 'category', 'facts', 'savedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() < 200
+        && request.resource.data.facts is list
+        && request.resource.data.facts.size() <= 20;
+    }
+  }
+}

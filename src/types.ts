@@ -15,11 +15,11 @@ export interface VisionResult {
   confidence: Confidence;
   /** One short camera instruction if the photo was poor ("Move closer"), otherwise empty. */
   tip: string;
-  hazards?: string[];
+  /** Anything dangerous in view (warning signs, hazard symbols, medicine warnings, allergens, expiry, physical hazards), most serious first. Spoken before everything else. */
+  alerts: string[];
   category?: Category;
   name?: string;
   facts?: Fact[];
-  warnings?: string[];
   /** Full transcription (Read) or original text (Translate). */
   text?: string;
   translation?: string;

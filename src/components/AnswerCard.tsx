@@ -41,16 +41,18 @@ export function AnswerCard({ answer, canVerify, canSave, busy, onRepeat, onReadA
           </span>
         )}
       </div>
+      {!!r.alerts.length && (
+        <div className="alerts" role="alert">
+          <h3>
+            <Icon name="alert" size={26} weight={2.5} /> Warning
+          </h3>
+          <ul>{r.alerts.map((w, i) => <li key={i}>{w}</li>)}</ul>
+        </div>
+      )}
       {answer.question && <p className="question">“{answer.question}”</p>}
       <p id={`ans-${answer.id}`} className="speech">{r.speech}</p>
       {r.tip && <p className="tip">{r.tip}</p>}
 
-      {!!r.hazards?.length && (
-        <div className="block hazards">
-          <h3>Hazards</h3>
-          <ul>{r.hazards.map((h, i) => <li key={i}>{h}</li>)}</ul>
-        </div>
-      )}
       {r.name && answer.mode === 'identify' && <p className="item-name">{r.name}</p>}
       {!!r.facts?.length && (
         <dl className="facts">
@@ -61,12 +63,6 @@ export function AnswerCard({ answer, canVerify, canSave, busy, onRepeat, onReadA
             </div>
           ))}
         </dl>
-      )}
-      {!!r.warnings?.length && (
-        <div className="block warnings" role="alert">
-          <h3>Warnings</h3>
-          <ul>{r.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
-        </div>
       )}
       {r.lines?.length ? (
         <div className="block">

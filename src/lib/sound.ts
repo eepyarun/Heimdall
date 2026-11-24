@@ -8,6 +8,7 @@ const NOTES = {
   listen: [520, 780],
   liveOn: [440, 660, 880],
   liveOff: [880, 660, 440],
+  alarm: [988, 740, 988, 740],
 } as const;
 
 export function tone(kind: keyof typeof NOTES) {

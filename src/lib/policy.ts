@@ -96,3 +96,32 @@ export function liveInterval(onDevice: boolean): number {
 export function modelChain(primary: string, others: string[]): string[] {
   return [primary, ...new Set([primary, ...others.filter(Boolean)])];
 }
+
+const ALERT_WORD: Record<string, string> = {
+  en: 'Warning', es: 'Advertencia', fr: 'Attention', de: 'Warnung', pt: 'Atenção', ja: '警告', zh: '警告', ko: '경고', hi: 'चेतावनी', ar: 'تحذير', ta: 'எச்சரிக்கை',
+};
+
+/** Trims, drops empties and repeats (case-insensitive), keeping the model's most-serious-first order. */
+export function cleanAlerts(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  return raw
+    .map((a) => String(a ?? '').trim().replace(/[.!]+$/, ''))
+    .filter((a) => a && !seen.has(a.toLowerCase()) && seen.add(a.toLowerCase()));
+}
+
+/** What Heimdall says aloud: dangers before anything else, then the answer, then the camera tip. */
+export function spokenAnswer(r: { alerts: string[]; speech: string; tip?: string }, lang: string, prefix = ''): string {
+  const parts: string[] = [];
+  if (r.alerts.length) parts.push(`${ALERT_WORD[lang] ?? ALERT_WORD.en}. ${r.alerts.join('. ')}.`);
+  if (prefix || r.speech) parts.push(prefix + r.speech);
+  if (r.tip) parts.push(r.tip);
+  return parts.join(' ');
+}
+
+/** Live narration repeats an alert only when it is new, so a sign in view isn't announced every frame. */
+export function newAlerts(alerts: string[], announced: Set<string>): string[] {
+  const fresh = alerts.filter((a) => !announced.has(a.toLowerCase()));
+  fresh.forEach((a) => announced.add(a.toLowerCase()));
+  return fresh;
+}

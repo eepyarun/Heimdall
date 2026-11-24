@@ -5,12 +5,12 @@ import { isConfigured, watchUser } from './lib/firebase';
 import { loadConfig } from './lib/config';
 import { checkDevice, setDeviceDisabled, isDeviceDisabled, type DeviceState } from './lib/device';
 import { fileToPart, partToDataUrl, see, SPEECH_LANG, verifyInCloud, warmUp, type SeeOptions } from './lib/vision';
-import { frameDifference, isBusyError, LIVE_CHANGE_THRESHOLD, LIVE_CLOUD_FRAME_LIMIT, liveInterval, PrivateModeUnavailable } from './lib/policy';
-import { buzz, canListen, getRate, isSpeaking, listen, setRate, speak, stopSpeaking } from './lib/speech';
+import { frameDifference, isBusyError, LIVE_CHANGE_THRESHOLD, LIVE_CLOUD_FRAME_LIMIT, liveInterval, newAlerts, PrivateModeUnavailable, spokenAnswer } from './lib/policy';
+import { buzz, canListen, getRate, isSpeaking, listen, setLocalVoicesOnly, setRate, speak, stopSpeaking } from './lib/speech';
 import { tone } from './lib/sound';
 import { removeItem, saveItem, watchItems } from './lib/items';
 import { renderSample, SAMPLES } from './lib/samples';
-import type { Answer, Mode, Privacy, SavedItem } from './types';
+import type { Answer, Mode, Privacy, SavedItem, VisionResult } from './types';
 import { Camera, type CameraHandle } from './components/Camera';
 import { AnswerCard } from './components/AnswerCard';
 import { Settings } from './components/Settings';
@@ -102,7 +102,16 @@ function Heimdall() {
     checkDevice(lang).then(setDevice);
   }, [simulate, lang]);
   useEffect(() => (user ? watchItems(user.uid, setItems) : undefined), [user]);
-  useEffect(() => localStorage.setItem('heimdall.privacy', privacy), [privacy]);
+  useEffect(() => {
+    localStorage.setItem('heimdall.privacy', privacy);
+    setLocalVoicesOnly(privacy === 'private');
+  }, [privacy]);
+  useEffect(() => {
+    // Any tap cuts off the current answer immediately; the tapped control then speaks its own feedback.
+    const cut = (e: MouseEvent) => (e.target as HTMLElement).closest('button, summary, [role=radio]') && stopSpeaking();
+    document.addEventListener('click', cut, true);
+    return () => document.removeEventListener('click', cut, true);
+  }, []);
   useEffect(() => localStorage.setItem('heimdall.lang', lang), [lang]);
   useEffect(() => localStorage.setItem('heimdall.speak', speakAnswers ? '1' : '0'), [speakAnswers]);
 
@@ -126,22 +135,31 @@ function Heimdall() {
     setBusy(v);
   };
 
+  /** Dangers get their own alarm, a long vibration, and are spoken before the answer. */
+  const announce = (r: VisionResult, prefix = '') => {
+    if (r.alerts.length) {
+      tone('alarm');
+      buzz([250, 100, 250, 100, 250]);
+    } else {
+      tone('done');
+      buzz([20, 40, 20]);
+    }
+    say(spokenAnswer(r, lang, prefix));
+  };
+
   const run = async (img: Part, m: Mode, q?: string, context?: string) => {
     setBusyBoth(true);
     setError('');
     setImage(img);
     tone('shutter');
     buzz(30);
-    setStatus(m === 'ask' ? 'Thinking…' : 'Looking…');
+    say(m === 'ask' ? 'One moment, thinking.' : 'One moment, analyzing.');
     const opts: SeeOptions = { mode: m, image: img, privacy, lang, question: q, saved: items, context };
     lastOpts.current = opts;
     try {
       const a = await see(opts);
       setAnswers((xs) => [a, ...xs.filter((x) => !x.live)].slice(0, 10));
-      tone('done');
-      buzz([20, 40, 20]);
-      const prefix = a.escalated ? 'Double-checked. ' : '';
-      say(prefix + a.result.speech + (a.result.tip ? ` Tip: ${a.result.tip}` : ''));
+      announce(a.result, a.escalated ? 'Double-checked. ' : '');
     } catch (e) {
       tone('error');
       const msg = errorMessage(e);
@@ -191,6 +209,7 @@ function Heimdall() {
       let previous = '';
       let lastTip = '';
       let cloudFrames = 0;
+      const announced = new Set<string>();
       while (!stopped) {
         const s = latest.current;
         await sleep(liveInterval(s.device === 'available' && !s.simulate));
@@ -206,7 +225,15 @@ function Heimdall() {
           const a = await see({ mode: s.mode, image: img, privacy: s.privacy, lang: s.lang, saved: s.items, live: true, previous });
           if (stopped) break;
           if (a.attempts.some((x) => x.engine === 'in_cloud')) cloudFrames++;
-          if (a.result.speech) {
+          const fresh = newAlerts(a.result.alerts, announced);
+          if (fresh.length) {
+            previous = [...fresh, a.result.speech].filter(Boolean).join('. ');
+            setAnswers((xs) => [a, ...xs.filter((x) => !x.live)].slice(0, 10));
+            setCaption(`Warning: ${fresh.join('. ')}`);
+            tone('alarm');
+            buzz([250, 100, 250, 100, 250]);
+            say(spokenAnswer({ alerts: fresh, speech: a.result.speech }, s.lang));
+          } else if (a.result.speech) {
             previous = a.result.speech;
             setAnswers((xs) => [a, ...xs.filter((x) => !x.live)].slice(0, 10));
             setCaption(a.result.speech);
@@ -326,8 +353,7 @@ function Heimdall() {
     try {
       const v = await verifyInCloud({ ...lastOpts.current, mode: a.mode, question: a.question }, a);
       setAnswers((xs) => [v, ...xs.filter((x) => x.id !== a.id)]);
-      tone('done');
-      say(v.result.speech);
+      announce(v.result);
     } catch (e) {
       tone('error');
       const msg = errorMessage(e);
@@ -363,7 +389,7 @@ function Heimdall() {
         say(m.label);
       } else if (k === 'm') askByVoice();
       else if (k === 'l') (live ? stopLive() : startLive());
-      else if (k === 'r' && answers[0]) say(answers[0].result.speech);
+      else if (k === 'r' && answers[0]) say(spokenAnswer(answers[0].result, lang));
       else if (e.key === 'Escape') {
         stopSpeaking();
         stopLive();
@@ -378,7 +404,7 @@ function Heimdall() {
   const deviceTone = device === 'available' ? 'good' : device === 'downloading' || device === 'downloadable' ? 'warn' : 'cloud';
 
   return (
-    <div className="app">
+    <div className="app" data-mode={mode}>
       <header className="topbar">
         <h1 className="brand">
           <img className="logo" src="/favicon.svg" alt="" /> <span className="brand-name">Heimdall</span>
@@ -444,17 +470,24 @@ function Heimdall() {
             <button
               key={m.id}
               role="radio"
+              data-mode={m.id}
               aria-checked={mode === m.id}
-              className={mode === m.id ? 'on' : ''}
               onClick={() => {
                 setMode(m.id);
                 if (live && m.id === 'ask') stopLive();
+                else if (!busy) say(m.label);
               }}
               title={`${m.hint} (key ${i + 1})`}
             >
-              {mode === m.id && <span className="mode-check"><Icon name="check" size={16} /></span>}
-              <Icon name={m.id} size={28} />
-              <span>{m.label}</span>
+              <span className="mode-tile">
+                <Icon name={m.id} size={30} weight={2.5} />
+                {mode === m.id && (
+                  <span className="mode-check">
+                    <Icon name="check" size={14} weight={3} />
+                  </span>
+                )}
+              </span>
+              <span className="mode-label">{m.label}</span>
             </button>
           ))}
         </div>
@@ -520,7 +553,7 @@ function Heimdall() {
             busy={busy}
             canVerify={!current.live && !current.escalated && current.attempts[current.attempts.length - 1]?.engine === 'on_device' && privacy !== 'quality'}
             canSave={current.mode === 'identify' && !!current.result.name && !!user}
-            onRepeat={() => say(current.result.speech)}
+            onRepeat={() => say(spokenAnswer(current.result, lang))}
             onReadAll={current.result.text || current.result.translation ? () => say(current.result.translation || current.result.text || '') : undefined}
             onVerify={() => verify(current)}
             onSave={() => save(current)}

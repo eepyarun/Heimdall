@@ -2,7 +2,7 @@ import { getGenerativeModel, type GenerativeModel, type Part } from 'firebase/ai
 import { firebase } from './firebase';
 import { config } from './config';
 import { canRunPrivately, isDeviceDisabled, onDeviceOptions } from './device';
-import { chooseRoute, isBusyError, modelChain, normalizeConfidence, shouldEscalate, type RouteMode } from './policy';
+import { chooseRoute, cleanAlerts, isBusyError, modelChain, normalizeConfidence, shouldEscalate, type RouteMode } from './policy';
 import type { Answer, Attempt, Engine, Mode, Privacy, SavedItem, VisionResult } from '../types';
 
 export const LANGUAGES: Record<string, string> = {
@@ -88,14 +88,16 @@ const str = { type: 'string' };
 const strList = { type: 'array', items: str };
 const facts = { type: 'array', items: { type: 'object', properties: { label: str, value: str }, required: ['label', 'value'] } };
 const base = {
+  alerts: strList,
   speech: str,
   confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
   tip: str,
 };
+const baseRequired = ['alerts', 'speech', 'confidence', 'tip'];
 
 const SCHEMAS: Record<Mode, Record<string, unknown>> = {
-  describe: { type: 'object', properties: { ...base, hazards: strList }, required: ['speech', 'confidence', 'tip', 'hazards'] },
-  read: { type: 'object', properties: { ...base, text: str }, required: ['speech', 'confidence', 'tip', 'text'] },
+  describe: { type: 'object', properties: base, required: baseRequired },
+  read: { type: 'object', properties: { ...base, text: str }, required: [...baseRequired, 'text'] },
   identify: {
     type: 'object',
     properties: {
@@ -103,9 +105,8 @@ const SCHEMAS: Record<Mode, Record<string, unknown>> = {
       category: { type: 'string', enum: ['medicine', 'money', 'food', 'product', 'document', 'other'] },
       name: str,
       facts,
-      warnings: strList,
     },
-    required: ['speech', 'confidence', 'tip', 'category', 'name', 'facts', 'warnings'],
+    required: [...baseRequired, 'category', 'name', 'facts'],
   },
   translate: {
     type: 'object',
@@ -116,9 +117,9 @@ const SCHEMAS: Record<Mode, Record<string, unknown>> = {
       translation: str,
       lines: { type: 'array', items: { type: 'object', properties: { original: str, translation: str }, required: ['original', 'translation'] } },
     },
-    required: ['speech', 'confidence', 'tip', 'sourceLanguage', 'text', 'translation', 'lines'],
+    required: [...baseRequired, 'sourceLanguage', 'text', 'translation', 'lines'],
   },
-  ask: { type: 'object', properties: base, required: ['speech', 'confidence', 'tip'] },
+  ask: { type: 'object', properties: base, required: baseRequired },
 };
 
 const WORDS: Record<Mode, number> = { describe: 40, read: 70, identify: 40, translate: 70, ask: 45 };
@@ -135,7 +136,8 @@ function liveRules(previous: string | undefined) {
   return `
 LIVE MODE: the camera is on continuously and the person hears short updates while they move or pan.
 - Previously you said: "${previous || '(nothing yet)'}".
-- speech: at most 20 words, only what is NEW or newly important since then, hazards first. Do not repeat earlier information.
+- speech: at most 20 words, only what is NEW or newly important since then. Do not repeat earlier information.
+- alerts: still list every danger in view, even if mentioned before; the app avoids repeating them aloud.
 - If nothing meaningful changed, speech MUST be an empty string "".
 - tip: an empty string unless the camera shows nothing useful (covered, black, or pointing at the floor or ceiling).`;
 }
@@ -152,15 +154,19 @@ Rules:
 - Write "speech" in ${langName}. It is read aloud: at most ${x.live ? 20 : WORDS[mode]} words, the most important thing first, plain words, no markdown or lists.
 - Never guess. If something is blurry, cut off, too dark, or too small to read, say so plainly.
 - confidence: "high" only if you are sure; "medium" if part of it is unclear; "low" if the photo is too poor to be sure.
-- tip: if the photo is poor, one short instruction to fix it, such as "Move the camera closer", "Add more light", or "Tilt the camera down". Otherwise an empty string.`;
+- tip: if the photo is poor, one short instruction to fix it, such as "Move the camera closer", "Add more light", or "Tilt the camera down". Otherwise an empty string.
+- alerts: SAFETY FIRST. Check the whole photo for anything that warns of danger, whatever the task. Each alert is a short phrase in ${langName}, most serious first:
+  warning or danger signs ("Danger", "Caution", "Do not enter", "High voltage", "Road work ahead", "Wet floor"); hazard symbols (poison, flammable, corrosive, biohazard, radiation);
+  medicine and product warnings ("May cause drowsiness", "Do not take with alcohol", "Do not use if pregnant", "Keep out of reach of children"); allergens; an expiry date that has passed (today is ${new Date().toDateString()});
+  physical dangers near the person (stairs, curbs, traffic, holes, sharp edges, hot surfaces, open doors) with a clock direction and rough distance in steps, like "Stairs going down at 12 o'clock, 3 steps".
+  Copy printed warnings exactly. Never invent a danger. [] if there is none.
+- alerts are read aloud before speech, so do not repeat them in speech.`;
 
   switch (mode) {
     case 'describe':
       return `${rules}
 Task: describe what is in front of them so they can act safely.
-- Mention hazards first (steps, curbs, obstacles, vehicles, wet floors, open doors), with clock directions ("at 2 o'clock") and rough distance in steps.
-- Then the main objects and layout. Describe people only by what they are doing; never identify anyone.
-- hazards: each hazard as a short phrase, or [] if none.`;
+- speech: the main objects and layout, with clock directions ("at 2 o'clock") and rough distance in steps. Describe people only by what they are doing; never identify anyone.`;
     case 'read':
       return `${rules}
 Task: read the text in the photo.
@@ -172,7 +178,6 @@ Task: identify the main item they are holding or pointing the camera at.
 - category: medicine, money, food, product, document, or other.
 - name: what it is. For money, the denomination and currency, like "20 US dollars".
 - facts: the details that matter, copied exactly from the label. Medicine: drug name, strength, directions, expiry date. Food: product, best-before date, allergens. Product: brand, product, size, key instructions.
-- warnings: safety warnings, allergens, or an expiry date that has passed (today is ${new Date().toDateString()}). [] if none.
 - For medicine, confidence is "high" only if the drug name AND strength are clearly readable.${
         saved.length
           ? `\n- The user has saved these items: ${saved.map((s) => s.name).join('; ')}. If this is one of them, start speech with "This is your saved ${'<name>'}".`
@@ -198,6 +203,7 @@ function parse(raw: string): VisionResult {
   return {
     ...r,
     speech: (r.speech ?? '').trim(),
+    alerts: cleanAlerts(r.alerts),
     confidence: normalizeConfidence(r.confidence),
     tip: (r.tip ?? '').trim(),
   } as VisionResult;
@@ -251,7 +257,7 @@ async function attempt(
   try {
     result = parse(raw);
   } catch {
-    result = { speech: raw.slice(0, 400), confidence: 'low', tip: '' };
+    result = { speech: raw.slice(0, 400), confidence: 'low', tip: '', alerts: [] };
   }
   return { result, engine, ms: Math.round(performance.now() - t0), model: used };
 }
@@ -290,7 +296,7 @@ export async function see(o: SeeOptions): Promise<Answer> {
   } catch (e) {
     if (!(e instanceof TimeoutError)) throw e;
     // A slow live frame is simply skipped; the next frame will be newer anyway.
-    if (o.live) return answer(o, { speech: '', confidence: 'low', tip: '' }, [], false);
+    if (o.live) return answer(o, { speech: '', confidence: 'low', tip: '', alerts: [] }, [], false);
     attempts.push({ engine: 'on_device', model: 'Gemini Nano', ms: ON_DEVICE_TIMEOUT_MS, reason: 'On-device AI was too slow, so Heimdall asked the cloud instead' });
   }
 

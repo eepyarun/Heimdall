@@ -1,6 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseRoute, PrivateModeUnavailable, shouldEscalate, normalizeConfidence, isBusyError, modelChain, frameDifference, LIVE_CHANGE_THRESHOLD } from '../src/lib/policy.ts';
+import { chooseRoute, PrivateModeUnavailable, shouldEscalate, normalizeConfidence, isBusyError, modelChain, frameDifference, LIVE_CHANGE_THRESHOLD, cleanAlerts, spokenAnswer, newAlerts } from '../src/lib/policy.ts';
+
+test('dangers are spoken before the answer, in the chosen language', () => {
+  const r = { alerts: ['May cause dizziness', 'Do not use if pregnant'], speech: 'Lisinopril 10 milligrams.', tip: '' };
+  assert.equal(spokenAnswer(r, 'en'), 'Warning. May cause dizziness. Do not use if pregnant. Lisinopril 10 milligrams.');
+  assert.equal(spokenAnswer(r, 'ko', 'Double-checked. ').startsWith('경고. '), true);
+  assert.equal(spokenAnswer({ alerts: [], speech: 'A kitchen.', tip: 'Add more light' }, 'en'), 'A kitchen. Add more light');
+});
+
+test('alerts are cleaned and de-duplicated, keeping the most serious first', () => {
+  assert.deepEqual(cleanAlerts([' Danger! ', 'danger', '', 'Wet floor.']), ['Danger', 'Wet floor']);
+  assert.deepEqual(cleanAlerts(undefined), []);
+});
+
+test('live narration announces each alert only once', () => {
+  const seen = new Set<string>();
+  assert.deepEqual(newAlerts(['Stairs ahead'], seen), ['Stairs ahead']);
+  assert.deepEqual(newAlerts(['stairs ahead', 'Car at 3 o\'clock'], seen), ['Car at 3 o\'clock']);
+});
 
 test('live narration never escalates, so it stays fast and does not burn cloud quota', () => {
   const e = { privacy: 'smart' as const, answeredOnDevice: true, confidence: 'low' as const, category: 'medicine' as const, escalateAt: 'low' as const, escalateMedicineAt: 'medium' as const };

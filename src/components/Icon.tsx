@@ -88,9 +88,9 @@ const PATHS = {
 export type IconName = keyof typeof PATHS;
 
 /** Simple line icons: large, familiar shapes that stay legible for low-vision users. Decorative; buttons carry text labels. */
-export function Icon({ name, size = 24 }: { name: IconName; size?: number }) {
+export function Icon({ name, size = 24, weight = 2 }: { name: IconName; size?: number; weight?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={weight} strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
       {PATHS[name]}
     </svg>
   );

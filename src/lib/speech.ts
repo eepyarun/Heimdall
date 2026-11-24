@@ -11,16 +11,78 @@ export function getRate() {
   return rate;
 }
 
-/** Speech synthesis runs locally in the browser/OS, so spoken answers never add a network hop. */
+let chosenVoice = localStorage.getItem('heimdall.voice') ?? '';
+let localOnly = false;
+
+export function setVoice(uri: string) {
+  chosenVoice = uri;
+  localStorage.setItem('heimdall.voice', uri);
+}
+
+export function getVoice() {
+  return chosenVoice;
+}
+
+/** In Private mode the answer text must not go to a cloud voice either (Chrome's "Google" voices and Edge "Online" voices are network-backed). */
+export function setLocalVoicesOnly(v: boolean) {
+  localOnly = v;
+}
+
+/** Higher is more natural: neural/online voices (Edge, Windows), Siri enhanced/premium (iOS, macOS), then Google's Chrome voices. */
+function naturalness(v: SpeechSynthesisVoice) {
+  let s = 0;
+  if (/natural|neural/i.test(v.name)) s += 6;
+  if (/premium|enhanced|siri/i.test(v.name)) s += 5;
+  if (/online/i.test(v.name)) s += 3;
+  if (/google/i.test(v.name)) s += 3;
+  if (/compact|espeak/i.test(v.name)) s -= 4;
+  return s;
+}
+
+/** Voices for a language, most natural first. */
+export function voicesFor(lang: string): SpeechSynthesisVoice[] {
+  if (!synth) return [];
+  const base = lang.slice(0, 2).toLowerCase();
+  return synth
+    .getVoices()
+    .filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(base) && (!localOnly || v.localService))
+    .sort((a, b) => naturalness(b) - naturalness(a) + (b.lang === lang ? 1 : 0) - (a.lang === lang ? 1 : 0));
+}
+
+export function onVoicesChanged(cb: () => void) {
+  synth?.addEventListener('voiceschanged', cb);
+  return () => synth?.removeEventListener('voiceschanged', cb);
+}
+
+function pickVoice(lang: string) {
+  const all = voicesFor(lang);
+  return all.find((v) => v.voiceURI === chosenVoice) ?? all[0];
+}
+
+/** Chunks of whole sentences up to ~180 characters: Chrome's network voices stop mid-utterance after ~15 seconds. */
+function chunks(text: string) {
+  const sentences = text.match(/[^.!?。！？]+[.!?。！？]*\s*/g) ?? [text];
+  const out: string[] = [];
+  for (const s of sentences) {
+    const last = out.length - 1;
+    if (last >= 0 && out[last].length + s.length <= 180) out[last] += s;
+    else out.push(s);
+  }
+  return out.map((s) => s.trim()).filter(Boolean);
+}
+
+/** Speech synthesis uses the platform's voices; any new speech cuts off whatever was playing. */
 export function speak(text: string, lang = 'en-US') {
   if (!synth || !text) return;
   synth.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = lang;
-  u.rate = rate;
-  const voice = synth.getVoices().find((v) => v.lang === lang) ?? synth.getVoices().find((v) => v.lang.startsWith(lang.slice(0, 2)));
-  if (voice) u.voice = voice;
-  synth.speak(u);
+  const voice = pickVoice(lang);
+  for (const part of chunks(text)) {
+    const u = new SpeechSynthesisUtterance(part);
+    u.lang = voice?.lang ?? lang;
+    u.rate = rate;
+    if (voice) u.voice = voice;
+    synth.speak(u);
+  }
 }
 
 export function stopSpeaking() {
@@ -28,7 +90,7 @@ export function stopSpeaking() {
 }
 
 export function isSpeaking() {
-  return !!synth?.speaking;
+  return !!synth?.speaking || !!synth?.pending;
 }
 
 type Recognition = {

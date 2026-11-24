@@ -1,5 +1,7 @@
 import type { Privacy, SavedItem } from '../types';
-import { LANGUAGES } from '../lib/vision';
+import { useEffect, useState } from 'react';
+import { LANGUAGES, SPEECH_LANG } from '../lib/vision';
+import { getVoice, onVoicesChanged, setVoice, speak, voicesFor } from '../lib/speech';
 import { config } from '../lib/config';
 
 const PRIVACY: { id: Privacy; title: string; body: string }[] = [
@@ -26,6 +28,10 @@ interface Props {
 
 export function Settings(p: Props) {
   const onDevice = config().onDeviceLanguages;
+  const [voice, setVoiceState] = useState(getVoice());
+  const [, refresh] = useState(0);
+  useEffect(() => onVoicesChanged(() => refresh((n) => n + 1)), []);
+  const voices = voicesFor(SPEECH_LANG[p.lang] ?? 'en-US');
   return (
     <div className="sheet-backdrop" role="dialog" aria-modal aria-labelledby="settings-title" onClick={p.onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -54,6 +60,19 @@ export function Settings(p: Props) {
               <option key={code} value={code}>
                 {name}
                 {onDevice.includes(code) ? '' : ' (cloud only)'}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="field">
+          <span>Voice</span>
+          <select value={voice} onChange={(e) => { setVoice(e.target.value); setVoiceState(e.target.value); speak('Hello, I am Heimdall.', SPEECH_LANG[p.lang]); }}>
+            <option value="">Automatic (most natural on this device)</option>
+            {voices.map((v) => (
+              <option key={v.voiceURI} value={v.voiceURI}>
+                {v.name}
+                {v.localService ? '' : ' (online)'}
               </option>
             ))}
           </select>

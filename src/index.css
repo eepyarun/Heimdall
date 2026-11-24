@@ -60,6 +60,15 @@
   }
 }
 
+/* Calm is the default: the same hues, desaturated. Near-black icons on them are >= 6.5:1. */
+[data-colors='calm'] {
+  --c-describe: #d8b65a;
+  --c-read: #79b08a;
+  --c-identify: #d98078;
+  --c-translate: #86a6da;
+  --c-ask: #d6a06a;
+}
+
 [data-mode='describe'] { --m: var(--c-describe); }
 [data-mode='read'] { --m: var(--c-read); }
 [data-mode='identify'] { --m: var(--c-identify); }
@@ -81,7 +90,7 @@ code { background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 0.3re
 
 button, input, select { font: inherit; color: inherit; }
 button, .overlay-btn {
-  min-height: 3rem; min-width: 3rem; padding: 0.5em 1em; border-radius: 0.75rem; border: 2px solid var(--border); background: var(--surface);
+  min-height: 3.5rem; min-width: 3.5rem; padding: 0.55em 1.1em; border-radius: 0.9rem; border: 2px solid var(--border); background: var(--surface);
   cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 0.5em; font-weight: 700; line-height: 1.25;
 }
 button:hover:not(:disabled) { background: var(--surface-2); }
@@ -108,13 +117,13 @@ input:focus-visible, select:focus-visible { border-color: var(--primary); }
 .logo { width: 2rem; height: 2rem; border-radius: 0.5rem; }
 .icon-btn { padding: 0; flex-shrink: 0; }
 
-.status-chip { min-height: 3rem; border-radius: 999px; font-size: 0.9rem; padding: 0.3em 0.9em; white-space: nowrap; flex-shrink: 0; }
+.status-chip { min-height: 3.5rem; border-radius: 999px; font-size: 0.9rem; padding: 0.3em 0.9em; white-space: nowrap; flex-shrink: 0; }
 .status-chip.good svg { color: var(--teal); }
 .status-chip.warn svg { color: var(--amber); }
 .status-chip.cloud svg { color: var(--primary); }
 
 .stage {
-  flex: 1; display: flex; flex-direction: column; gap: 1rem;
+  flex: 1; display: flex; flex-direction: column; gap: 1.25rem;
   padding: 0.75rem 0.75rem 1.5rem; padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
 
@@ -122,7 +131,7 @@ input:focus-visible, select:focus-visible { border-color: var(--primary); }
 
 .viewer {
   position: relative; border-radius: 1.25rem; overflow: hidden; background: #121212; width: 100%;
-  height: min(50dvh, 34rem); min-height: 16rem; isolation: isolate; border: 2px solid var(--border);
+  height: min(35dvh, 28rem); min-height: 13rem; isolation: isolate; border: 2px solid var(--border);
 }
 .viewer.is-busy { border: 4px solid var(--m); }
 .viewer.is-live { border: 4px solid var(--amber); }
@@ -164,14 +173,15 @@ input:focus-visible, select:focus-visible { border-color: var(--primary); }
 
 /* ---------- modes ---------- */
 
-.modes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.3rem; }
-.modes button { flex-direction: column; gap: 0.35rem; padding: 0.3rem 0; border: 0; background: none; border-radius: 1rem; }
+/* Three across, two below: fewer, larger targets per row with clear space between them. */
+.modes { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem 1.25rem; }
+.modes button { flex-direction: column; gap: 0.45rem; width: 5.5rem; padding: 0.4rem 0; border: 0; background: none; border-radius: 1.1rem; }
 .modes button:hover:not(:disabled) { background: var(--surface); }
 .mode-tile {
-  position: relative; width: 3.6rem; height: 3.6rem; border-radius: 1.1rem; display: grid; place-items: center;
+  position: relative; width: 4.5rem; height: 4.5rem; border-radius: 1.3rem; display: grid; place-items: center;
   background: var(--m); color: var(--tile-ink); border: 2px solid var(--tile-edge);
 }
-.mode-label { font-size: 0.85rem; line-height: 1.2; }
+.mode-label { font-size: 1rem; line-height: 1.2; }
 /* Selection never relies on colour: a thick ring, a check badge, and an underlined label. */
 .modes button[aria-checked='true'] .mode-tile { outline: 4px solid var(--ink); outline-offset: 3px; }
 .modes button[aria-checked='true'] .mode-label { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
@@ -185,17 +195,17 @@ input:focus-visible, select:focus-visible { border-color: var(--primary); }
 
 /* ---------- dock ---------- */
 
-.dock { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center; gap: 0.5rem; }
+.dock { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center; gap: 1.25rem; }
 .dock-btn { flex-direction: column; gap: 0.35rem; border: 0; background: none; padding: 0.25rem; }
 .dock-btn:hover:not(:disabled) { background: none; }
 .dock-btn:hover:not(:disabled) .dock-icon { background: var(--surface-2); }
-.dock-icon { width: 4rem; height: 4rem; border-radius: 1rem; display: grid; place-items: center; background: var(--surface); border: 2px solid var(--border); }
-.dock-label { font-size: 0.95rem; font-weight: 700; }
+.dock-icon { width: 5rem; height: 5rem; border-radius: 1.3rem; display: grid; place-items: center; background: var(--surface); border: 2px solid var(--border); }
+.dock-label { font-size: 1.05rem; font-weight: 700; }
 .dock-btn.on .dock-icon, .dock-btn.on:hover .dock-icon { background: var(--amber); border-color: var(--ink); color: var(--on-amber); }
 
 .shutter {
-  width: 6.25rem; height: 6.25rem; border-radius: 50%; background: var(--m); color: var(--tile-ink);
-  border: 4px solid var(--bg); box-shadow: 0 0 0 3px var(--m), 0 0 0 5px var(--tile-edge); font-size: 1.25rem;
+  width: 7.25rem; height: 7.25rem; border-radius: 50%; background: var(--m); color: var(--tile-ink);
+  border: 4px solid var(--bg); box-shadow: 0 0 0 3px var(--m), 0 0 0 5px var(--tile-edge); font-size: 1.4rem;
 }
 .shutter:hover:not(:disabled) { background: var(--m); text-decoration: underline; }
 .shutter.busy { background: var(--surface); color: var(--ink); }
@@ -251,8 +261,8 @@ input:focus-visible, select:focus-visible { border-color: var(--primary); }
 .lines td:last-child { font-weight: 700; }
 .pre { white-space: pre-wrap; }
 details summary { cursor: pointer; font-weight: 700; min-height: 3rem; display: flex; align-items: center; }
-.answer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 1rem; }
-.answer-actions button { font-size: 0.95rem; justify-content: flex-start; background: var(--bg); }
+.answer-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 1.25rem; }
+.answer-actions button { min-height: 4rem; font-size: 1rem; justify-content: flex-start; background: var(--bg); }
 .answer-actions .verify { border-color: var(--primary); }
 .answer-actions .verify svg { color: var(--primary); }
 .trail { margin-top: 0.9rem; border-top: 2px solid var(--surface-2); padding-top: 0.4rem; color: var(--muted); font-size: 0.95rem; }
@@ -295,12 +305,12 @@ legend { font-weight: 700; margin-bottom: 0.4rem; }
 
 @media (max-width: 26rem) {
   .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .mode-label { font-size: 0.78rem; }
 }
 @media (max-width: 22rem) {
-  .mode-tile { width: 3.1rem; height: 3.1rem; }
-  .dock-icon { width: 3.5rem; height: 3.5rem; }
-  .shutter { width: 5.5rem; height: 5.5rem; }
+  .modes { gap: 0.75rem 0.75rem; }
+  .mode-tile { width: 4rem; height: 4rem; }
+  .dock-icon { width: 4.25rem; height: 4.25rem; }
+  .shutter { width: 6.25rem; height: 6.25rem; }
 }
 
 /* The spinner is the only motion; with reduced motion the "Looking…" status bar carries the state on its own. */

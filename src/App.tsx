@@ -4,13 +4,13 @@ import type { User } from 'firebase/auth';
 import { isConfigured, watchUser } from './lib/firebase';
 import { loadConfig } from './lib/config';
 import { checkDevice, setDeviceDisabled, isDeviceDisabled, type DeviceState } from './lib/device';
-import { fileToPart, partToDataUrl, see, SPEECH_LANG, verifyInCloud, warmUp, type SeeOptions } from './lib/vision';
+import { fileToPart, OnDeviceTooSlow, partToDataUrl, see, SPEECH_LANG, verifyInCloud, warmUp, type SeeOptions } from './lib/vision';
 import { frameDifference, isBusyError, LIVE_CHANGE_THRESHOLD, LIVE_CLOUD_FRAME_LIMIT, liveInterval, newAlerts, PrivateModeUnavailable, spokenAnswer } from './lib/policy';
 import { buzz, canListen, getRate, isSpeaking, listen, setLocalVoicesOnly, setRate, speak, stopSpeaking } from './lib/speech';
 import { tone } from './lib/sound';
 import { removeItem, saveItem, watchItems } from './lib/items';
 import { renderSample, SAMPLES } from './lib/samples';
-import type { Answer, Mode, Privacy, SavedItem, VisionResult } from './types';
+import type { Answer, ColorStyle, Mode, Privacy, SavedItem, VisionResult } from './types';
 import { Camera, type CameraHandle } from './components/Camera';
 import { AnswerCard } from './components/AnswerCard';
 import { Settings } from './components/Settings';
@@ -39,7 +39,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function errorMessage(e: unknown): string {
   const s = String(e);
-  if (e instanceof PrivateModeUnavailable) return e.message;
+  if (e instanceof PrivateModeUnavailable || e instanceof OnDeviceTooSlow) return e.message;
   if (/api key|app.?check|403|401/i.test(s)) return 'Heimdall could not reach its cloud AI. Check the Firebase setup.';
   if (isBusyError(e)) return 'The cloud AI is busy right now. Please try again in a moment.';
   if (!navigator.onLine || /failed to fetch|network/i.test(s)) return 'You seem to be offline and on-device AI is not available here.';
@@ -63,6 +63,7 @@ function Heimdall() {
   const [rate, setRateState] = useState(getRate());
   const [speakAnswers, setSpeakAnswers] = useState(() => localStorage.getItem('heimdall.speak') !== '0');
   const [simulate, setSimulate] = useState(isDeviceDisabled());
+  const [colors, setColors] = useState<ColorStyle>(() => (localStorage.getItem('heimdall.colors') as ColorStyle) || 'calm');
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [busy, setBusy] = useState(false);
@@ -113,6 +114,7 @@ function Heimdall() {
     return () => document.removeEventListener('click', cut, true);
   }, []);
   useEffect(() => localStorage.setItem('heimdall.lang', lang), [lang]);
+  useEffect(() => localStorage.setItem('heimdall.colors', colors), [colors]);
   useEffect(() => localStorage.setItem('heimdall.speak', speakAnswers ? '1' : '0'), [speakAnswers]);
 
   const say = useCallback(
@@ -154,7 +156,14 @@ function Heimdall() {
     tone('shutter');
     buzz(30);
     say(m === 'ask' ? 'One moment, thinking.' : 'One moment, analyzing.');
-    const opts: SeeOptions = { mode: m, image: img, privacy, lang, question: q, saved: items, context };
+    let lastNote = Date.now();
+    const note = (msg: string) => {
+      lastNote = Date.now();
+      say(msg);
+    };
+    // Silence while waiting feels like a crash to someone who can't see the spinner.
+    const reassure = setInterval(() => Date.now() - lastNote >= 12_000 && note('Still working, one moment.'), 3_000);
+    const opts: SeeOptions = { mode: m, image: img, privacy, lang, question: q, saved: items, context, onProgress: note };
     lastOpts.current = opts;
     try {
       const a = await see(opts);
@@ -166,6 +175,7 @@ function Heimdall() {
       setError(msg);
       say(msg);
     } finally {
+      clearInterval(reassure);
       setBusyBoth(false);
     }
   };
@@ -404,7 +414,7 @@ function Heimdall() {
   const deviceTone = device === 'available' ? 'good' : device === 'downloading' || device === 'downloadable' ? 'warn' : 'cloud';
 
   return (
-    <div className="app" data-mode={mode}>
+    <div className="app" data-mode={mode} data-colors={colors}>
       <header className="topbar">
         <h1 className="brand">
           <img className="logo" src="/favicon.svg" alt="" /> <span className="brand-name">Heimdall</span>
@@ -480,7 +490,7 @@ function Heimdall() {
               title={`${m.hint} (key ${i + 1})`}
             >
               <span className="mode-tile">
-                <Icon name={m.id} size={30} weight={2.5} />
+                <Icon name={m.id} size={38} weight={2.5} />
                 {mode === m.id && (
                   <span className="mode-check">
                     <Icon name="check" size={14} weight={3} />
@@ -511,7 +521,7 @@ function Heimdall() {
             aria-pressed={live}
             disabled={busy || !ready || listening}
           >
-            <span className="dock-icon">{live ? <Icon name="stop" size={28} /> : <Icon name="live" size={28} />}</span>
+            <span className="dock-icon">{live ? <Icon name="stop" size={34} /> : <Icon name="live" size={34} />}</span>
             <span className="dock-label">{live ? 'Stop live' : 'Live'}</span>
           </button>
 
@@ -530,7 +540,7 @@ function Heimdall() {
             disabled={(busy && !listening) || !ready}
             aria-label={listening ? 'Stop listening' : 'Ask by voice about what the camera sees'}
           >
-            <span className="dock-icon"><Icon name="mic" size={28} /></span>
+            <span className="dock-icon"><Icon name="mic" size={34} /></span>
             <span className="dock-label">{listening ? 'Listening' : 'Voice'}</span>
           </button>
         </div>
@@ -586,6 +596,8 @@ function Heimdall() {
           rate={rate}
           speakAnswers={speakAnswers}
           simulateNoDevice={simulate}
+          colors={colors}
+          onColors={setColors}
           items={items}
           onPrivacy={setPrivacy}
           onLang={setLang}

@@ -220,8 +220,18 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+/** Private mode cannot fall back to the cloud, so it tells the user instead of waiting forever. */
+export class OnDeviceTooSlow extends Error {
+  constructor() {
+    super('On-device AI is taking too long. Private mode keeps photos on this device; switch to Smart mode in Settings to let the cloud help.');
+  }
+}
+
 const ON_DEVICE_TIMEOUT_MS = 30_000;
+const PRIVATE_TIMEOUT_MS = 60_000;
 const LIVE_ON_DEVICE_TIMEOUT_MS = 12_000;
+/** Per cloud model; a stalled model is treated like a busy one and the next backup is tried. */
+const CLOUD_TIMEOUT_MS = 40_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -232,8 +242,10 @@ async function attempt(
   cloudModel: string,
   text: string,
   image: Part,
-  timeoutMs?: number,
+  timeoutMs: number,
+  onRetry?: () => void,
 ): Promise<{ result: VisionResult; engine: Engine; ms: number; model: string }> {
+  const cloudOnly = route === 'only_in_cloud' || route === 'prefer_in_cloud';
   const cfg = config();
   const tries = modelChain(cloudModel, [cfg.verifyModel, ...cfg.backupModels, cfg.cloudModel]);
   const t0 = performance.now();
@@ -243,10 +255,12 @@ async function attempt(
     used = tries[i];
     const call = model(route, lang, SCHEMAS[mode], used).generateContent([text, image]);
     try {
-      res = timeoutMs ? await withTimeout(call, timeoutMs) : await call;
+      res = await withTimeout(call, timeoutMs);
       break;
     } catch (e) {
-      if (!isBusyError(e) || i === tries.length - 1) throw e;
+      const retry = isBusyError(e) || (cloudOnly && e instanceof TimeoutError);
+      if (!retry || i === tries.length - 1) throw e;
+      onRetry?.();
       if (tries[i + 1] === used) await sleep(800);
     }
   }
@@ -272,6 +286,8 @@ export interface SeeOptions {
   live?: boolean;
   previous?: string;
   context?: string;
+  /** Spoken progress while waiting, e.g. when Heimdall switches from on-device to cloud. */
+  onProgress?: (message: string) => void;
 }
 
 export async function see(o: SeeOptions): Promise<Answer> {
@@ -288,15 +304,29 @@ export async function see(o: SeeOptions): Promise<Answer> {
   const text = prompt(o.mode, o.lang, o.question, o.saved, o);
   const attempts: Attempt[] = [];
 
+  const onDeviceFirst = deviceReady && route.mode === 'prefer_on_device';
+  const timeout = o.live
+    ? onDeviceFirst || route.mode === 'only_on_device'
+      ? LIVE_ON_DEVICE_TIMEOUT_MS
+      : CLOUD_TIMEOUT_MS
+    : route.mode === 'only_on_device'
+      ? PRIVATE_TIMEOUT_MS
+      : onDeviceFirst
+        ? ON_DEVICE_TIMEOUT_MS
+        : CLOUD_TIMEOUT_MS;
+  const busyNote = () => o.onProgress?.('The cloud is busy. Trying another model.');
+
   let first: Awaited<ReturnType<typeof attempt>> | null = null;
   try {
-    const timeout = deviceReady && route.mode === 'prefer_on_device' ? (o.live ? LIVE_ON_DEVICE_TIMEOUT_MS : ON_DEVICE_TIMEOUT_MS) : undefined;
     const cloudModel = o.privacy === 'quality' ? cfg.verifyModel : cfg.cloudModel;
-    first = await attempt(o.mode, route.mode, o.lang, cloudModel, text, o.image, timeout);
+    first = await attempt(o.mode, route.mode, o.lang, cloudModel, text, o.image, timeout, busyNote);
   } catch (e) {
     if (!(e instanceof TimeoutError)) throw e;
     // A slow live frame is simply skipped; the next frame will be newer anyway.
     if (o.live) return answer(o, { speech: '', confidence: 'low', tip: '', alerts: [] }, [], false);
+    if (route.mode === 'only_on_device') throw new OnDeviceTooSlow();
+    if (!onDeviceFirst) throw new Error('Cloud AI unavailable: no answer in time');
+    o.onProgress?.('On-device AI is taking too long. Switching to cloud AI.');
     attempts.push({ engine: 'on_device', model: 'Gemini Nano', ms: ON_DEVICE_TIMEOUT_MS, reason: 'On-device AI was too slow, so Heimdall asked the cloud instead' });
   }
 
@@ -320,7 +350,15 @@ export async function see(o: SeeOptions): Promise<Answer> {
     if (!escalate) return answer(o, first.result, attempts, false);
   }
 
-  const verified = await attempt(o.mode, 'only_in_cloud', o.lang, cfg.verifyModel, text, o.image);
+  let verified: Awaited<ReturnType<typeof attempt>>;
+  try {
+    verified = await attempt(o.mode, 'only_in_cloud', o.lang, cfg.verifyModel, text, o.image, CLOUD_TIMEOUT_MS, busyNote);
+  } catch (e) {
+    // The on-device answer is still better than nothing; the trail shows the double-check failed.
+    if (!first) throw e;
+    attempts.push({ engine: 'in_cloud', model: cfg.verifyModel, ms: 0, reason: 'The cloud double-check could not be reached, so this is the on-device answer' });
+    return answer(o, first.result, attempts, false);
+  }
   attempts.push({
     engine: 'in_cloud',
     model: verified.model,
@@ -337,7 +375,7 @@ export async function see(o: SeeOptions): Promise<Answer> {
 export async function verifyInCloud(o: SeeOptions, prev: Answer): Promise<Answer> {
   const cfg = config();
   const text = prompt(o.mode, o.lang, o.question, o.saved, o);
-  const v = await attempt(o.mode, 'only_in_cloud', o.lang, cfg.verifyModel, text, o.image);
+  const v = await attempt(o.mode, 'only_in_cloud', o.lang, cfg.verifyModel, text, o.image, CLOUD_TIMEOUT_MS);
   return answer(
     o,
     v.result,

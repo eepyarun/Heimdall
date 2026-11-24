@@ -1,5 +1,7 @@
 export type Mode = 'describe' | 'read' | 'identify' | 'translate' | 'ask';
 export type Privacy = 'private' | 'smart' | 'quality';
+/** Calm: muted mode colours (default, for users who find bright colour overwhelming). Vivid: full-strength Google colours. */
+export type ColorStyle = 'calm' | 'vivid';
 export type Confidence = 'high' | 'medium' | 'low';
 export type Engine = 'on_device' | 'in_cloud';
 export type Category = 'medicine' | 'money' | 'food' | 'product' | 'document' | 'other';

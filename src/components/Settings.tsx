@@ -1,4 +1,4 @@
-import type { Privacy, SavedItem } from '../types';
+import type { ColorStyle, Privacy, SavedItem } from '../types';
 import { useEffect, useState } from 'react';
 import { LANGUAGES, SPEECH_LANG } from '../lib/vision';
 import { getVoice, onVoicesChanged, setVoice, speak, voicesFor } from '../lib/speech';
@@ -10,12 +10,19 @@ const PRIVACY: { id: Privacy; title: string; body: string }[] = [
   { id: 'quality', title: 'Best quality', body: 'Cloud first for the most detail. Falls back to this device when offline.' },
 ];
 
+const COLOR_STYLES: { id: ColorStyle; title: string; body: string }[] = [
+  { id: 'calm', title: 'Calm (recommended)', body: 'Soft colours for each mode. Easier on the eyes and less distracting.' },
+  { id: 'vivid', title: 'Vivid', body: 'Full-strength colours for each mode. Easier to tell apart with low vision.' },
+];
+
 interface Props {
   privacy: Privacy;
   lang: string;
   rate: number;
   speakAnswers: boolean;
   simulateNoDevice: boolean;
+  colors: ColorStyle;
+  onColors: (c: ColorStyle) => void;
   items: SavedItem[];
   onPrivacy: (p: Privacy) => void;
   onLang: (l: string) => void;
@@ -45,6 +52,19 @@ export function Settings(p: Props) {
           {PRIVACY.map((o) => (
             <label key={o.id} className={`radio-card ${p.privacy === o.id ? 'on' : ''}`}>
               <input type="radio" name="privacy" checked={p.privacy === o.id} onChange={() => p.onPrivacy(o.id)} />
+              <span>
+                <strong>{o.title}</strong>
+                <small>{o.body}</small>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+
+        <fieldset>
+          <legend>Colours</legend>
+          {COLOR_STYLES.map((o) => (
+            <label key={o.id} className={`radio-card ${p.colors === o.id ? 'on' : ''}`}>
+              <input type="radio" name="colors" checked={p.colors === o.id} onChange={() => p.onColors(o.id)} />
               <span>
                 <strong>{o.title}</strong>
                 <small>{o.body}</small>

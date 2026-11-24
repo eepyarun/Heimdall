@@ -69,9 +69,9 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-private val Yellow = Color(0xFFFBBC04)
-private val Bg = Color(0xFF121315)
-private val Panel = Color(0xFF202124)
+private val Primary = Color(0xFF7CACF8)
+private val Bg = Color(0xFF1A1D20)
+private val Panel = Color(0xFF24282C)
 
 class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         tts = TextToSpeech(this) { }
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = Yellow, background = Bg, surface = Panel)) {
+            MaterialTheme(colorScheme = darkColorScheme(primary = Primary, background = Bg, surface = Panel)) {
                 HeimdallScreen(speak = ::speak)
             }
         }
@@ -199,7 +199,7 @@ fun HeimdallScreen(speak: (String, String) -> Unit) {
             OutlinedButton(
                 onClick = { scope.launch { Device.prepare { device = it } } },
                 enabled = device == DeviceState.DOWNLOADABLE,
-            ) { Text(DEVICE_COPY.getValue(device), color = Yellow) }
+            ) { Text(DEVICE_COPY.getValue(device), color = Primary) }
         }
 
         Box(
@@ -249,7 +249,7 @@ fun HeimdallScreen(speak: (String, String) -> Unit) {
                 onClick = ::capture,
                 enabled = !busy,
                 shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(containerColor = Yellow, contentColor = Bg),
+                colors = ButtonDefaults.buttonColors(containerColor = Primary, contentColor = Bg),
                 modifier = Modifier.size(96.dp).semantics { contentDescription = "${MODE_LABELS.first { it.first == mode }.second}. Take photo and look" },
             ) { Text(if (busy) "…" else "Look", fontWeight = FontWeight.Bold) }
         }
@@ -287,9 +287,9 @@ private fun AnswerView(a: Answer, onRepeat: () -> Unit) {
     ) {
         val engine = if (a.attempts.lastOrNull()?.onDevice == true) "On this device" else "Cloud"
         val conf = when (r.confidence) { Confidence.HIGH -> "Sure"; Confidence.MEDIUM -> "Fairly sure"; Confidence.LOW -> "Not sure" }
-        Text("$engine · $conf${if (a.escalated) " · Double-checked" else ""}", color = Yellow, fontSize = 13.sp)
+        Text("$engine · $conf${if (a.escalated) " · Double-checked" else ""}", color = Primary, fontSize = 13.sp)
         Text(r.speech, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        if (r.tip.isNotBlank()) Text("Tip: ${r.tip}", color = Yellow)
+        if (r.tip.isNotBlank()) Text("Tip: ${r.tip}", color = Primary)
         if (r.hazards.isNotEmpty()) Text("Hazards: " + r.hazards.joinToString("; "), color = Color(0xFFFF8A80))
         r.facts.forEach { Text("${it.label}: ${it.value}", color = Color.White) }
         if (r.warnings.isNotEmpty()) Text("Warnings: " + r.warnings.joinToString("; "), color = Color(0xFFFF8A80))

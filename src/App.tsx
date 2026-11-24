@@ -378,32 +378,32 @@ function Heimdall() {
   const deviceTone = device === 'available' ? 'good' : device === 'downloading' || device === 'downloadable' ? 'warn' : 'cloud';
 
   return (
-    <div className="app" data-mode={mode}>
+    <div className="app">
+      <header className="topbar">
+        <h1 className="brand">
+          <img className="logo" src="/favicon.svg" alt="" /> <span className="brand-name">Heimdall</span>
+        </h1>
+        <button
+          className={`status-chip ${deviceTone}`}
+          onClick={() => device === 'downloadable' && ensureWarm()}
+          aria-label={`AI: ${DEVICE_COPY[device]}. Privacy: ${privacy}.${device === 'downloadable' ? ' Tap to download on-device AI.' : ''}`}
+        >
+          <Icon name={device === 'available' ? 'chip' : device === 'downloadable' || device === 'downloading' ? 'download' : 'cloud'} size={20} />
+          {DEVICE_COPY[device]}
+          {device === 'downloading' && progress !== null && ` ${Math.round(progress * 100)}%`}
+        </button>
+        <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings">
+          <Icon name="settings" />
+        </button>
+      </header>
+
       <main className="stage">
         <section className={`viewer ${live ? 'is-live' : ''} ${busy ? 'is-busy' : ''}`} aria-label="Camera">
           <Camera ref={cam} frozen={frozen} />
-          {busy && <div className="scanning" aria-hidden />}
 
-          <header className="viewer-top">
-            <h1 className="brand">
-              <img className="logo" src="/favicon.svg" alt="" /> <span className="brand-name">Heimdall</span>
-            </h1>
-            <button
-              className={`status-chip ${deviceTone}`}
-              onClick={() => device === 'downloadable' && ensureWarm()}
-              aria-label={`AI: ${DEVICE_COPY[device]}. Privacy: ${privacy}.${device === 'downloadable' ? ' Tap to download on-device AI.' : ''}`}
-            >
-              {DEVICE_COPY[device]}
-              {device === 'downloading' && progress !== null && ` ${Math.round(progress * 100)}%`}
-            </button>
-            <button className="glass-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings">
-              <Icon name="settings" />
-            </button>
-          </header>
-
-          {live && (
-            <div className="live-badge" aria-hidden>
-              <span className="pulse" /> LIVE · {modeLabel(mode)}
+          {(live || busy) && (
+            <div className={`viewer-flag ${live ? 'flag-live' : 'flag-busy'}`} aria-hidden>
+              <Icon name={live ? 'live' : 'describe'} size={20} /> {live ? `LIVE · ${modeLabel(mode)}` : status || 'Looking…'}
             </div>
           )}
 
@@ -413,17 +413,18 @@ function Heimdall() {
             </p>
           )}
 
+          {frozen && !busy && !listening && (
+            <button className="overlay-btn viewer-back" onClick={backToCamera}>
+              <Icon name="back" size={20} /> Camera
+            </button>
+          )}
+
           <div className="viewer-bottom">
-            <button className="glass-btn labeled" onClick={() => fileInput.current?.click()} disabled={busy}>
+            <button className="overlay-btn" onClick={() => fileInput.current?.click()} disabled={busy}>
               <Icon name="photo" size={20} /> Photo
             </button>
-            {frozen && !busy && !listening && (
-              <button className="glass-btn labeled" onClick={backToCamera}>
-                <Icon name="back" size={20} /> Camera
-              </button>
-            )}
             <details className="samples" ref={samplesMenu}>
-              <summary className="glass-btn labeled">
+              <summary className="overlay-btn">
                 <Icon name="sample" size={20} /> Samples
               </summary>
               <div className="samples-menu">
@@ -443,7 +444,6 @@ function Heimdall() {
             <button
               key={m.id}
               role="radio"
-              data-mode={m.id}
               aria-checked={mode === m.id}
               className={mode === m.id ? 'on' : ''}
               onClick={() => {
@@ -452,7 +452,8 @@ function Heimdall() {
               }}
               title={`${m.hint} (key ${i + 1})`}
             >
-              <Icon name={m.id} size={26} />
+              {mode === m.id && <span className="mode-check"><Icon name="check" size={16} /></span>}
+              <Icon name={m.id} size={28} />
               <span>{m.label}</span>
             </button>
           ))}
@@ -502,7 +503,15 @@ function Heimdall() {
         </div>
 
         <div className="live" aria-live="polite" aria-atomic="true">
-          {error ? <p className="error">{error}</p> : busy || live ? <p className="muted">{status}</p> : null}
+          {error ? (
+            <p className="status-bar is-error" role="alert">
+              <Icon name="alert" size={22} /> {error}
+            </p>
+          ) : busy || live || listening ? (
+            <p className="status-bar is-alert">
+              <Icon name={listening ? 'mic' : live ? 'live' : 'describe'} size={22} /> {listening ? 'Listening…' : status}
+            </p>
+          ) : null}
         </div>
 
         {current && (

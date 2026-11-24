@@ -20,20 +20,26 @@ export function AnswerCard({ answer, canVerify, canSave, busy, onRepeat, onReadA
   const r = answer.result;
   const last = answer.attempts[answer.attempts.length - 1];
   return (
-    <section className="answer" data-mode={answer.mode} aria-labelledby={`ans-${answer.id}`}>
+    <section className="answer" aria-labelledby={`ans-${answer.id}`}>
       <div className="answer-badges">
         {last && (
           <span className={`badge engine-${last.engine}`}>
             <Icon name={last.engine === 'on_device' ? 'chip' : 'cloud'} size={14} /> {ENGINE_LABEL[last.engine]}
           </span>
         )}
-        <span className={`badge conf-${r.confidence}`}>{CONF_LABEL[r.confidence]}</span>
+        <span className={`badge conf-${r.confidence}`}>
+          <Icon name={r.confidence === 'high' ? 'check' : 'alert'} size={14} /> {CONF_LABEL[r.confidence]}
+        </span>
         {answer.escalated && (
           <span className="badge escalated">
             <Icon name="shield" size={14} /> Double-checked
           </span>
         )}
-        {answer.live && <span className="badge live-tag">Live</span>}
+        {answer.live && (
+          <span className="badge live-tag">
+            <Icon name="live" size={14} /> Live
+          </span>
+        )}
       </div>
       {answer.question && <p className="question">“{answer.question}”</p>}
       <p id={`ans-${answer.id}`} className="speech">{r.speech}</p>

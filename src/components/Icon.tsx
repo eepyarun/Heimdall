@@ -74,6 +74,14 @@ const PATHS = {
   ),
   star: <path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z" />,
   back: <path d="M15 5l-7 7 7 7" />,
+  check: <path d="M5 12.5l4.5 4.5L19 7.5" />,
+  alert: (
+    <>
+      <path d="M12 3l10 18H2z" />
+      <path d="M12 10v4M12 17.5v.5" />
+    </>
+  ),
+  download: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />,
   book: <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 19V5M8 7h7" />,
 } as const;
 

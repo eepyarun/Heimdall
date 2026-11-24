@@ -19,7 +19,6 @@ import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -231,9 +230,10 @@ fun HeimdallScreen(speak: (String, String) -> Unit) {
             }
         }
 
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // All five modes stay visible: horizontal scrolling is hard for TalkBack users.
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             MODE_LABELS.forEach { (m, label) ->
-                FilterChip(selected = mode == m, onClick = { mode = m }, label = { Text(label) })
+                FilterChip(selected = mode == m, onClick = { mode = m }, label = { Text(label, fontSize = 12.sp, maxLines = 1) }, modifier = Modifier.weight(1f))
             }
         }
 

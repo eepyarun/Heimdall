@@ -5,8 +5,8 @@ import { isConfigured, watchUser } from './lib/firebase';
 import { loadConfig } from './lib/config';
 import { checkDevice, setDeviceDisabled, isDeviceDisabled, type DeviceState } from './lib/device';
 import { fileToPart, partToDataUrl, see, SPEECH_LANG, verifyInCloud, warmUp, type SeeOptions } from './lib/vision';
-import { isBusyError, PrivateModeUnavailable } from './lib/policy';
-import { buzz, canListen, getRate, listen, setRate, speak, stopSpeaking } from './lib/speech';
+import { frameDifference, isBusyError, LIVE_CHANGE_THRESHOLD, LIVE_CLOUD_FRAME_LIMIT, liveInterval, PrivateModeUnavailable } from './lib/policy';
+import { buzz, canListen, getRate, isSpeaking, listen, setRate, speak, stopSpeaking } from './lib/speech';
 import { tone } from './lib/sound';
 import { removeItem, saveItem, watchItems } from './lib/items';
 import { renderSample, SAMPLES } from './lib/samples';
@@ -14,24 +14,28 @@ import type { Answer, Mode, Privacy, SavedItem } from './types';
 import { Camera, type CameraHandle } from './components/Camera';
 import { AnswerCard } from './components/AnswerCard';
 import { Settings } from './components/Settings';
+import { Icon } from './components/Icon';
 
-const MODES: { id: Mode; label: string; icon: string; hint: string }[] = [
-  { id: 'describe', label: 'Describe', icon: '👁', hint: 'What is in front of me' },
-  { id: 'read', label: 'Read', icon: '📄', hint: 'Read text aloud' },
-  { id: 'identify', label: 'Identify', icon: '💊', hint: 'Medicine, money, products' },
-  { id: 'translate', label: 'Translate', icon: '🌐', hint: 'Signs and menus' },
-  { id: 'ask', label: 'Ask', icon: '❓', hint: 'Ask a question' },
+const MODES: { id: Mode; label: string; hint: string }[] = [
+  { id: 'describe', label: 'Describe', hint: 'What is in front of me' },
+  { id: 'read', label: 'Read', hint: 'Read text aloud' },
+  { id: 'identify', label: 'Identify', hint: 'Medicine, money, products' },
+  { id: 'translate', label: 'Translate', hint: 'Signs and menus' },
+  { id: 'ask', label: 'Ask', hint: 'Type a question' },
 ];
+const modeLabel = (m: Mode) => MODES.find((x) => x.id === m)!.label;
 
 const DEVICE_COPY: Record<DeviceState, string> = {
   checking: 'Checking…',
-  available: 'On-device AI ready',
-  downloadable: 'Tap to enable on-device AI',
-  downloading: 'Downloading on-device AI',
+  available: 'On-device AI',
+  downloadable: 'Enable on-device',
+  downloading: 'Downloading',
   unavailable: 'Cloud AI',
   unsupported: 'Cloud AI',
-  disabled: 'Cloud AI (simulated)',
+  disabled: 'Cloud AI (demo)',
 };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function errorMessage(e: unknown): string {
   const s = String(e);
@@ -68,6 +72,8 @@ function Heimdall() {
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [question, setQuestion] = useState('');
   const [listening, setListening] = useState(false);
+  const [live, setLive] = useState(false);
+  const [caption, setCaption] = useState('');
   const [items, setItems] = useState<SavedItem[]>([]);
 
   const cam = useRef<CameraHandle>(null);
@@ -75,7 +81,13 @@ function Heimdall() {
   const samplesMenu = useRef<HTMLDetailsElement>(null);
   const warmed = useRef(false);
   const lastOpts = useRef<SeeOptions | null>(null);
+  const stopListen = useRef<(() => void) | null>(null);
+  const busyRef = useRef(false);
   const speechLang = SPEECH_LANG[lang] ?? 'en-US';
+
+  // Live narration runs in a long-lived loop, so it reads current settings from a ref instead of stale closures.
+  const latest = useRef({ mode, privacy, lang, items, device, simulate });
+  latest.current = { mode, privacy, lang, items, device, simulate };
 
   useEffect(() => watchUser(setUser), []);
   useEffect(() => {
@@ -109,18 +121,23 @@ function Heimdall() {
     warmUp((p) => setProgress(p)).finally(() => checkDevice(lang).then(setDevice));
   };
 
-  const run = async (img: Part, m: Mode, q?: string) => {
-    setBusy(true);
+  const setBusyBoth = (v: boolean) => {
+    busyRef.current = v;
+    setBusy(v);
+  };
+
+  const run = async (img: Part, m: Mode, q?: string, context?: string) => {
+    setBusyBoth(true);
     setError('');
     setImage(img);
     tone('shutter');
     buzz(30);
     setStatus(m === 'ask' ? 'Thinking…' : 'Looking…');
-    const opts: SeeOptions = { mode: m, image: img, privacy, lang, question: q, saved: items };
+    const opts: SeeOptions = { mode: m, image: img, privacy, lang, question: q, saved: items, context };
     lastOpts.current = opts;
     try {
       const a = await see(opts);
-      setAnswers((xs) => [a, ...xs].slice(0, 10));
+      setAnswers((xs) => [a, ...xs.filter((x) => !x.live)].slice(0, 10));
       tone('done');
       buzz([20, 40, 20]);
       const prefix = a.escalated ? 'Double-checked. ' : '';
@@ -131,44 +148,161 @@ function Heimdall() {
       setError(msg);
       say(msg);
     } finally {
-      setBusy(false);
+      setBusyBoth(false);
     }
   };
 
+  // ---------- live narration ----------
+
+  const stopLive = (announce = true) => {
+    if (!live) return;
+    setLive(false);
+    setCaption('');
+    if (announce) {
+      tone('liveOff');
+      say('Live off.');
+    }
+  };
+
+  const startLive = () => {
+    stopSpeaking();
+    ensureWarm();
+    setImage(null);
+    setError('');
+    const m = mode === 'ask' ? 'describe' : mode;
+    setMode(m);
+    setLive(true);
+    tone('liveOn');
+    buzz([30, 30, 30]);
+    say(`Live ${modeLabel(m)}. I'll speak when something changes.`);
+  };
+
+  useEffect(() => {
+    if (!live) return;
+    let stopped = false;
+    let wakeLock: { release: () => Promise<void> } | undefined;
+    (navigator as unknown as { wakeLock?: { request: (t: 'screen') => Promise<typeof wakeLock> } }).wakeLock
+      ?.request('screen')
+      .then((w) => (wakeLock = w))
+      .catch(() => undefined);
+
+    const loop = async () => {
+      let lastSig: Uint8Array | null = null;
+      let previous = '';
+      let lastTip = '';
+      let cloudFrames = 0;
+      while (!stopped) {
+        const s = latest.current;
+        await sleep(liveInterval(s.device === 'available' && !s.simulate));
+        if (stopped) break;
+        if (document.hidden || busyRef.current || isSpeaking()) continue;
+        const sig = cam.current?.signature();
+        if (!sig) continue;
+        if (lastSig && frameDifference(sig, lastSig) < LIVE_CHANGE_THRESHOLD) continue;
+        const img = await cam.current?.capture(768);
+        if (!img) continue;
+        lastSig = sig;
+        try {
+          const a = await see({ mode: s.mode, image: img, privacy: s.privacy, lang: s.lang, saved: s.items, live: true, previous });
+          if (stopped) break;
+          if (a.attempts.some((x) => x.engine === 'in_cloud')) cloudFrames++;
+          if (a.result.speech) {
+            previous = a.result.speech;
+            setAnswers((xs) => [a, ...xs.filter((x) => !x.live)].slice(0, 10));
+            setCaption(a.result.speech);
+            say(a.result.speech);
+          } else if (a.result.tip && a.result.tip !== lastTip) {
+            lastTip = a.result.tip;
+            setCaption(a.result.tip);
+            say(a.result.tip);
+          }
+          if (cloudFrames >= LIVE_CLOUD_FRAME_LIMIT) {
+            setLive(false);
+            setCaption('');
+            say('Live paused to save cloud data. Tap Live to continue.');
+            break;
+          }
+        } catch (e) {
+          if (stopped) break;
+          setLive(false);
+          setCaption('');
+          tone('error');
+          const msg = errorMessage(e);
+          setError(msg);
+          say(msg);
+          break;
+        }
+      }
+    };
+    loop();
+    return () => {
+      stopped = true;
+      wakeLock?.release().catch(() => undefined);
+    };
+  }, [live, say]);
+
+  // ---------- actions ----------
+
   const look = async () => {
     if (busy) return;
+    stopLive(false);
     stopSpeaking();
     ensureWarm();
     if (mode === 'ask') {
       const img = image ?? (await cam.current?.capture());
       if (!img) return say('Take or choose a photo first.');
-      if (!question.trim()) return startListening(img);
+      if (!question.trim()) return askByVoice(img);
       const q = question.trim();
       setQuestion('');
-      return run(img, 'ask', q);
+      return run(img, 'ask', q, contextFor(img));
     }
     const img = await cam.current?.capture();
     if (!img) return say('The camera is not ready. Choose a photo instead.');
     run(img, mode);
   };
 
-  const startListening = async (img: Part) => {
-    if (!canListen()) return say('Type your question in the box, then press Look.');
+  /** Follow-ups about the same photo carry the last answer, so "what about the expiry date?" makes sense. */
+  const contextFor = (img: Part) => (lastOpts.current?.image === img && answers[0] ? answers[0].result.speech : undefined);
+
+  const askByVoice = async (given?: Part) => {
+    if (listening) return stopListen.current?.();
+    if (busy) return;
+    if (!canListen()) {
+      setMode('ask');
+      return say('Voice questions are not supported in this browser. Type your question instead.');
+    }
+    stopLive(false);
+    stopSpeaking();
+    ensureWarm();
+    const img = given ?? image ?? (await cam.current?.capture());
+    if (!img) return say('The camera is not ready. Choose a photo first.');
+    setImage(img);
+    setError('');
     setListening(true);
-    speak('Ask your question.', speechLang);
-    await new Promise((r) => setTimeout(r, 900));
+    setCaption('Listening…');
+    tone('listen');
+    buzz(20);
+    const l = listen(speechLang);
+    stopListen.current = l.stop;
     try {
-      const q = (await listen(speechLang).result).trim();
-      setListening(false);
-      if (q) run(img, 'ask', q);
-      else say('I did not hear a question.');
+      const q = (await l.result).trim();
+      if (q) {
+        setCaption(`“${q}”`);
+        await run(img, 'ask', q, contextFor(img));
+      } else {
+        say('I did not hear a question. Tap the microphone and try again.');
+      }
     } catch (e) {
-      setListening(false);
       say(e instanceof Error ? e.message : 'Could not listen.');
+    } finally {
+      setListening(false);
+      stopListen.current = null;
+      setCaption('');
     }
   };
 
   const analyzePart = (part: Part, m: Mode) => {
+    stopLive(false);
     ensureWarm();
     setMode(m);
     if (m === 'ask') {
@@ -187,7 +321,7 @@ function Heimdall() {
 
   const verify = async (a: Answer) => {
     if (!lastOpts.current || busy) return;
-    setBusy(true);
+    setBusyBoth(true);
     say('Double-checking in the cloud.');
     try {
       const v = await verifyInCloud({ ...lastOpts.current, mode: a.mode, question: a.question }, a);
@@ -200,7 +334,7 @@ function Heimdall() {
       setError(msg);
       say(msg);
     } finally {
-      setBusy(false);
+      setBusyBoth(false);
     }
   };
 
@@ -210,9 +344,16 @@ function Heimdall() {
     say(`Saved ${a.result.name} to My things.`);
   };
 
+  const backToCamera = () => {
+    setImage(null);
+    setError('');
+    setStatus('');
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, select, [role=dialog]')) return;
+      const k = e.key.toLowerCase();
       if (e.code === 'Space' || e.key === 'Enter') {
         e.preventDefault();
         look();
@@ -220,8 +361,13 @@ function Heimdall() {
         const m = MODES[Number(e.key) - 1];
         setMode(m.id);
         say(m.label);
-      } else if (e.key.toLowerCase() === 'r' && answers[0]) say(answers[0].result.speech);
-      else if (e.key === 'Escape') stopSpeaking();
+      } else if (k === 'm') askByVoice();
+      else if (k === 'l') (live ? stopLive() : startLive());
+      else if (k === 'r' && answers[0]) say(answers[0].result.speech);
+      else if (e.key === 'Escape') {
+        stopSpeaking();
+        stopLive();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -233,75 +379,54 @@ function Heimdall() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <h1 className="brand">
-          <img className="logo" src="/favicon.svg" alt="" /> Heimdall
-        </h1>
-        <button
-          className={`status-chip ${deviceTone}`}
-          onClick={() => device === 'downloadable' && ensureWarm()}
-          aria-label={`AI status: ${DEVICE_COPY[device]}. Privacy: ${privacy}.`}
-        >
-          <span className="dot" />
-          {DEVICE_COPY[device]}
-          {device === 'downloading' && progress !== null && ` ${Math.round(progress * 100)}%`}
-        </button>
-        <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings">⚙</button>
-      </header>
-
       <main className="stage">
-        <div className="viewer">
+        <section className={`viewer ${live ? 'is-live' : ''} ${busy ? 'is-busy' : ''}`} aria-label="Camera">
           <Camera ref={cam} frozen={frozen} />
           {busy && <div className="scanning" aria-hidden />}
-          {frozen && !busy && (
-            <button className="live-btn" onClick={() => { setImage(null); setError(''); setStatus(''); }}>
-              ● Back to live camera
-            </button>
-          )}
-        </div>
 
-        <div className="controls">
-          <div className="modes" role="radiogroup" aria-label="Mode">
-            {MODES.map((m, i) => (
-              <button
-                key={m.id}
-                role="radio"
-                aria-checked={mode === m.id}
-                className={mode === m.id ? 'on' : ''}
-                onClick={() => setMode(m.id)}
-                title={`${m.hint} (key ${i + 1})`}
-              >
-                <span aria-hidden>{m.icon}</span>
-                {m.label}
+          <header className="viewer-top">
+            <h1 className="brand">
+              <img className="logo" src="/favicon.svg" alt="" /> Heimdall
+            </h1>
+            <button
+              className={`status-chip ${deviceTone}`}
+              onClick={() => device === 'downloadable' && ensureWarm()}
+              aria-label={`AI: ${DEVICE_COPY[device]}. Privacy: ${privacy}.${device === 'downloadable' ? ' Tap to download on-device AI.' : ''}`}
+            >
+              <Icon name={device === 'available' ? 'chip' : 'cloud'} size={16} />
+              {DEVICE_COPY[device]}
+              {device === 'downloading' && progress !== null && ` ${Math.round(progress * 100)}%`}
+            </button>
+            <button className="glass-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings">
+              <Icon name="settings" />
+            </button>
+          </header>
+
+          {live && (
+            <div className="live-badge" aria-hidden>
+              <span className="pulse" /> LIVE · {modeLabel(mode)}
+            </div>
+          )}
+
+          {caption && (
+            <p className="caption" aria-hidden>
+              {caption}
+            </p>
+          )}
+
+          <div className="viewer-bottom">
+            <button className="glass-btn labeled" onClick={() => fileInput.current?.click()} disabled={busy}>
+              <Icon name="photo" size={20} /> Photo
+            </button>
+            {frozen && !busy && !listening && (
+              <button className="glass-btn labeled" onClick={backToCamera}>
+                <Icon name="back" size={20} /> Live camera
               </button>
-            ))}
-          </div>
-
-          {mode === 'ask' && (
-            <form className="ask-row" onSubmit={(e) => { e.preventDefault(); look(); }}>
-              <input
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                placeholder={image ? 'Ask about this photo…' : 'Ask about what the camera sees…'}
-                aria-label="Your question"
-              />
-              {canListen() && (
-                <button type="button" className="mic" onClick={async () => { const img = image ?? (await cam.current?.capture()); if (img) startListening(img); }} aria-label="Ask by voice" disabled={busy || listening}>
-                  {listening ? '…' : '🎤'}
-                </button>
-              )}
-            </form>
-          )}
-
-          <div className="shutter-row">
-            <button className="secondary" onClick={() => fileInput.current?.click()} disabled={busy}>
-              🖼 Choose photo
-            </button>
-            <button className={`shutter ${busy ? 'busy' : ''}`} onClick={look} disabled={busy || !ready} aria-label={`${MODES.find((m) => m.id === mode)!.label}. Take photo and ${mode === 'ask' ? 'ask' : 'look'}`}>
-              {busy ? <span className="spinner" /> : mode === 'ask' ? 'Ask' : 'Look'}
-            </button>
+            )}
             <details className="samples" ref={samplesMenu}>
-              <summary className="secondary">🧪 Samples</summary>
+              <summary className="glass-btn labeled">
+                <Icon name="sample" size={20} /> Samples
+              </summary>
               <div className="samples-menu">
                 {SAMPLES.map((s) => (
                   <button key={s.id} onClick={() => { samplesMenu.current?.removeAttribute('open'); loadSample(s); }} disabled={busy}>
@@ -310,25 +435,87 @@ function Heimdall() {
                 ))}
               </div>
             </details>
-            <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ''; }} />
           </div>
+          <input ref={fileInput} type="file" accept="image/*" hidden onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ''; }} />
+        </section>
+
+        <div className="modes" role="radiogroup" aria-label="Mode">
+          {MODES.map((m, i) => (
+            <button
+              key={m.id}
+              role="radio"
+              aria-checked={mode === m.id}
+              className={mode === m.id ? 'on' : ''}
+              onClick={() => {
+                setMode(m.id);
+                if (live && m.id === 'ask') stopLive();
+              }}
+              title={`${m.hint} (key ${i + 1})`}
+            >
+              <Icon name={m.id} size={26} />
+              <span>{m.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {mode === 'ask' && (
+          <form className="ask-row" onSubmit={(e) => { e.preventDefault(); look(); }}>
+            <input
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              placeholder={image ? 'Ask about this photo' : 'Ask about what the camera sees'}
+              aria-label="Your question"
+            />
+            <button type="submit" disabled={busy || !question.trim()}>Send</button>
+          </form>
+        )}
+
+        <div className="dock">
+          <button
+            className={`dock-btn ${live ? 'on' : ''}`}
+            onClick={() => (live ? stopLive() : startLive())}
+            aria-pressed={live}
+            disabled={busy || !ready || listening}
+          >
+            <span className="dock-icon">{live ? <Icon name="stop" size={28} /> : <Icon name="live" size={28} />}</span>
+            <span className="dock-label">{live ? 'Stop live' : 'Live'}</span>
+          </button>
+
+          <button
+            className={`shutter ${busy ? 'busy' : ''}`}
+            onClick={look}
+            disabled={busy || !ready || listening}
+            aria-label={`${modeLabel(mode)}. Take photo and ${mode === 'ask' ? 'ask' : 'look'}`}
+          >
+            {busy ? <span className="spinner" /> : mode === 'ask' ? 'Ask' : 'Look'}
+          </button>
+
+          <button
+            className={`dock-btn ${listening ? 'on listening' : ''}`}
+            onClick={() => askByVoice()}
+            disabled={(busy && !listening) || !ready}
+            aria-label={listening ? 'Stop listening' : 'Ask by voice about what the camera sees'}
+          >
+            <span className="dock-icon"><Icon name="mic" size={28} /></span>
+            <span className="dock-label">{listening ? 'Listening' : 'Voice'}</span>
+          </button>
         </div>
 
         <div className="live" aria-live="polite" aria-atomic="true">
-          {error ? <p className="error">{error}</p> : busy ? <p className="muted">{status}</p> : null}
+          {error ? <p className="error">{error}</p> : busy || live ? <p className="muted">{status}</p> : null}
         </div>
 
         {current && (
           <AnswerCard
             answer={current}
             busy={busy}
-            canVerify={!current.escalated && current.attempts[current.attempts.length - 1].engine === 'on_device' && privacy !== 'quality'}
+            canVerify={!current.live && !current.escalated && current.attempts[current.attempts.length - 1]?.engine === 'on_device' && privacy !== 'quality'}
             canSave={current.mode === 'identify' && !!current.result.name && !!user}
             onRepeat={() => say(current.result.speech)}
             onReadAll={current.result.text || current.result.translation ? () => say(current.result.translation || current.result.text || '') : undefined}
             onVerify={() => verify(current)}
             onSave={() => save(current)}
-            onAsk={() => { setMode('ask'); say('Ask your question about this photo.'); }}
+            onAsk={() => askByVoice()}
           />
         )}
 
@@ -338,12 +525,16 @@ function Heimdall() {
             <ul>
               {answers.slice(1).map((a) => (
                 <li key={a.id}>
-                  <strong>{MODES.find((m) => m.id === a.mode)!.label}:</strong> {a.result.speech}
+                  <strong>{modeLabel(a.mode)}:</strong> {a.result.speech}
                 </li>
               ))}
             </ul>
           </details>
         )}
+
+        <p className="shortcuts muted">
+          Keys: Space look · M ask by voice · L live · 1–5 modes · R repeat · Esc stop
+        </p>
       </main>
 
       {settingsOpen && (

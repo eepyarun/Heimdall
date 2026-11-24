@@ -27,6 +27,10 @@ export function stopSpeaking() {
   synth?.cancel();
 }
 
+export function isSpeaking() {
+  return !!synth?.speaking;
+}
+
 type Recognition = {
   lang: string;
   interimResults: boolean;

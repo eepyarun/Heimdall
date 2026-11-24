@@ -50,6 +50,8 @@ export function isAtOrBelow(c: Confidence, threshold: Confidence) {
 
 export interface EscalationInput {
   privacy: Privacy;
+  /** Live narration favours speed; the user can press Look for a double-checked answer. */
+  live?: boolean;
   answeredOnDevice: boolean;
   confidence: Confidence;
   category?: Category;
@@ -59,7 +61,7 @@ export interface EscalationInput {
 
 /** Smart mode double-checks unsure on-device answers in the cloud; medicine uses a stricter bar. */
 export function shouldEscalate(e: EscalationInput): boolean {
-  if (e.privacy !== 'smart' || !e.answeredOnDevice) return false;
+  if (e.privacy !== 'smart' || !e.answeredOnDevice || e.live) return false;
   const threshold = e.category === 'medicine' ? e.escalateMedicineAt : e.escalateAt;
   return isAtOrBelow(e.confidence, threshold);
 }
@@ -71,6 +73,23 @@ export function normalizeConfidence(v: unknown): Confidence {
 /** Errors worth retrying on another cloud model: overload, quota, or a retired model name. */
 export function isBusyError(e: unknown): boolean {
   return /high demand|overloaded|unavailable|quota|resource.?exhausted|no longer available|not found for API|\b(429|500|502|503|504)\b/i.test(String(e));
+}
+
+/** Live mode only sends a frame when the view changed this much (mean absolute difference of tiny grayscale thumbnails, 0–1). */
+export const LIVE_CHANGE_THRESHOLD = 0.06;
+
+export function frameDifference(a: ArrayLike<number>, b: ArrayLike<number>): number {
+  if (a.length !== b.length || !a.length) return 1;
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / a.length / 255;
+}
+
+/** Cloud frames cost quota, so live narration pauses after this many and asks before continuing. On-device frames are free. */
+export const LIVE_CLOUD_FRAME_LIMIT = 40;
+
+export function liveInterval(onDevice: boolean): number {
+  return onDevice ? 2000 : 5000;
 }
 
 /** Try the chosen model twice (overload spikes are brief), then each other model once. */

@@ -49,6 +49,8 @@ export interface Answer {
   attempts: Attempt[];
   escalated: boolean;
   at: number;
+  /** Produced by live narration rather than a single Look. */
+  live?: boolean;
 }
 
 export interface SavedItem {

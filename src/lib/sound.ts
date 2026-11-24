@@ -1,10 +1,19 @@
 let ctx: AudioContext | undefined;
 
 /** Short non-speech cues so a blind user knows a photo was taken and an answer arrived. */
-export function tone(kind: 'shutter' | 'done' | 'error') {
+const NOTES = {
+  shutter: [880],
+  done: [660, 990],
+  error: [300, 200],
+  listen: [520, 780],
+  liveOn: [440, 660, 880],
+  liveOff: [880, 660, 440],
+} as const;
+
+export function tone(kind: keyof typeof NOTES) {
   try {
     ctx ??= new AudioContext();
-    const notes = kind === 'shutter' ? [880] : kind === 'done' ? [660, 990] : [300, 200];
+    const notes = NOTES[kind];
     notes.forEach((f, i) => {
       const o = ctx!.createOscillator();
       const g = ctx!.createGain();

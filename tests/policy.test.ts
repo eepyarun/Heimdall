@@ -1,6 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chooseRoute, PrivateModeUnavailable, shouldEscalate, normalizeConfidence, isBusyError, modelChain } from '../src/lib/policy.ts';
+import { chooseRoute, PrivateModeUnavailable, shouldEscalate, normalizeConfidence, isBusyError, modelChain, frameDifference, LIVE_CHANGE_THRESHOLD } from '../src/lib/policy.ts';
+
+test('live narration never escalates, so it stays fast and does not burn cloud quota', () => {
+  const e = { privacy: 'smart' as const, answeredOnDevice: true, confidence: 'low' as const, category: 'medicine' as const, escalateAt: 'low' as const, escalateMedicineAt: 'medium' as const };
+  assert.equal(shouldEscalate(e), true);
+  assert.equal(shouldEscalate({ ...e, live: true }), false);
+});
+
+test('live mode skips frames when the camera view has not changed', () => {
+  const still = [10, 20, 30, 40];
+  assert.ok(frameDifference(still, [11, 21, 29, 40]) < LIVE_CHANGE_THRESHOLD);
+  assert.ok(frameDifference(still, [200, 20, 220, 40]) > LIVE_CHANGE_THRESHOLD);
+  assert.equal(frameDifference(still, []), 1);
+});
 
 test('busy, quota, and retired-model errors are retried; auth errors are not', () => {
   assert.ok(isBusyError(new Error('[500 ] This model is currently experiencing high demand.')));

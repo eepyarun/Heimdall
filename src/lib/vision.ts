@@ -62,8 +62,8 @@ export async function warmUp(onProgress?: (p: number) => void) {
 
 // ---------- images ----------
 
-export async function toJpegPart(source: CanvasImageSource & { width?: number; height?: number }, w: number, h: number): Promise<Part> {
-  const scale = Math.min(1, 1024 / Math.max(w, h));
+export async function toJpegPart(source: CanvasImageSource & { width?: number; height?: number }, w: number, h: number, maxSide = 1024): Promise<Part> {
+  const scale = Math.min(1, maxSide / Math.max(w, h));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
@@ -123,11 +123,33 @@ const SCHEMAS: Record<Mode, Record<string, unknown>> = {
 
 const WORDS: Record<Mode, number> = { describe: 40, read: 70, identify: 40, translate: 70, ask: 45 };
 
-function prompt(mode: Mode, lang: string, question: string | undefined, saved: SavedItem[]) {
+interface PromptExtras {
+  /** Live narration: what Heimdall said about the previous frame. */
+  live?: boolean;
+  previous?: string;
+  /** Follow-up questions: Heimdall's last answer about this scene. */
+  context?: string;
+}
+
+function liveRules(previous: string | undefined) {
+  return `
+LIVE MODE: the camera is on continuously and the person hears short updates while they move or pan.
+- Previously you said: "${previous || '(nothing yet)'}".
+- speech: at most 20 words, only what is NEW or newly important since then, hazards first. Do not repeat earlier information.
+- If nothing meaningful changed, speech MUST be an empty string "".
+- tip: an empty string unless the camera shows nothing useful (covered, black, or pointing at the floor or ceiling).`;
+}
+
+function prompt(mode: Mode, lang: string, question: string | undefined, saved: SavedItem[], x: PromptExtras = {}) {
+  const followUp = x.context && mode === 'ask' ? `\n- Earlier you told them: "${x.context}". Use it if the question refers to it.` : '';
+  return basePrompt(mode, lang, question, saved, x) + followUp + (x.live ? liveRules(x.previous) : '');
+}
+
+function basePrompt(mode: Mode, lang: string, question: string | undefined, saved: SavedItem[], x: PromptExtras) {
   const langName = LANGUAGES[lang] ?? 'English';
   const rules = `You are Heimdall, the eyes of a person who is blind or has low vision. They took this photo with their phone camera and cannot see it.
 Rules:
-- Write "speech" in ${langName}. It is read aloud: at most ${WORDS[mode]} words, the most important thing first, plain words, no markdown or lists.
+- Write "speech" in ${langName}. It is read aloud: at most ${x.live ? 20 : WORDS[mode]} words, the most important thing first, plain words, no markdown or lists.
 - Never guess. If something is blurry, cut off, too dark, or too small to read, say so plainly.
 - confidence: "high" only if you are sure; "medium" if part of it is unclear; "low" if the photo is too poor to be sure.
 - tip: if the photo is poor, one short instruction to fix it, such as "Move the camera closer", "Add more light", or "Tilt the camera down". Otherwise an empty string.`;
@@ -193,6 +215,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 const ON_DEVICE_TIMEOUT_MS = 30_000;
+const LIVE_ON_DEVICE_TIMEOUT_MS = 12_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -240,6 +263,9 @@ export interface SeeOptions {
   lang: string;
   question?: string;
   saved: SavedItem[];
+  live?: boolean;
+  previous?: string;
+  context?: string;
 }
 
 export async function see(o: SeeOptions): Promise<Answer> {
@@ -253,16 +279,18 @@ export async function see(o: SeeOptions): Promise<Answer> {
     onDeviceLanguages: cfg.onDeviceLanguages,
     languageName: LANGUAGES[o.lang] ?? o.lang,
   });
-  const text = prompt(o.mode, o.lang, o.question, o.saved);
+  const text = prompt(o.mode, o.lang, o.question, o.saved, o);
   const attempts: Attempt[] = [];
 
   let first: Awaited<ReturnType<typeof attempt>> | null = null;
   try {
-    const timeout = deviceReady && route.mode === 'prefer_on_device' ? ON_DEVICE_TIMEOUT_MS : undefined;
+    const timeout = deviceReady && route.mode === 'prefer_on_device' ? (o.live ? LIVE_ON_DEVICE_TIMEOUT_MS : ON_DEVICE_TIMEOUT_MS) : undefined;
     const cloudModel = o.privacy === 'quality' ? cfg.verifyModel : cfg.cloudModel;
     first = await attempt(o.mode, route.mode, o.lang, cloudModel, text, o.image, timeout);
   } catch (e) {
     if (!(e instanceof TimeoutError)) throw e;
+    // A slow live frame is simply skipped; the next frame will be newer anyway.
+    if (o.live) return answer(o, { speech: '', confidence: 'low', tip: '' }, [], false);
     attempts.push({ engine: 'on_device', model: 'Gemini Nano', ms: ON_DEVICE_TIMEOUT_MS, reason: 'On-device AI was too slow, so Heimdall asked the cloud instead' });
   }
 
@@ -276,6 +304,7 @@ export async function see(o: SeeOptions): Promise<Answer> {
     });
     const escalate = shouldEscalate({
       privacy: o.privacy,
+      live: o.live,
       answeredOnDevice: first.engine === 'on_device',
       confidence: first.result.confidence,
       category: first.result.category,
@@ -301,7 +330,7 @@ export async function see(o: SeeOptions): Promise<Answer> {
 /** User explicitly asks for a cloud double-check (e.g. from Private mode). */
 export async function verifyInCloud(o: SeeOptions, prev: Answer): Promise<Answer> {
   const cfg = config();
-  const text = prompt(o.mode, o.lang, o.question, o.saved);
+  const text = prompt(o.mode, o.lang, o.question, o.saved, o);
   const v = await attempt(o.mode, 'only_in_cloud', o.lang, cfg.verifyModel, text, o.image);
   return answer(
     o,
@@ -312,5 +341,5 @@ export async function verifyInCloud(o: SeeOptions, prev: Answer): Promise<Answer
 }
 
 function answer(o: SeeOptions, result: VisionResult, attempts: Attempt[], escalated: boolean): Answer {
-  return { id: crypto.randomUUID(), mode: o.mode, question: o.question, result, attempts, escalated, at: Date.now() };
+  return { id: crypto.randomUUID(), mode: o.mode, question: o.question, result, attempts, escalated, at: Date.now(), live: o.live };
 }

@@ -20,7 +20,7 @@ export function AnswerCard({ answer, canVerify, canSave, busy, onRepeat, onReadA
   const r = answer.result;
   const last = answer.attempts[answer.attempts.length - 1];
   return (
-    <section className="answer" aria-labelledby={`ans-${answer.id}`}>
+    <section className="answer" data-mode={answer.mode} aria-labelledby={`ans-${answer.id}`}>
       <div className="answer-badges">
         {last && (
           <span className={`badge engine-${last.engine}`}>

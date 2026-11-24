@@ -378,7 +378,7 @@ function Heimdall() {
   const deviceTone = device === 'available' ? 'good' : device === 'downloading' || device === 'downloadable' ? 'warn' : 'cloud';
 
   return (
-    <div className="app">
+    <div className="app" data-mode={mode}>
       <main className="stage">
         <section className={`viewer ${live ? 'is-live' : ''} ${busy ? 'is-busy' : ''}`} aria-label="Camera">
           <Camera ref={cam} frozen={frozen} />
@@ -386,14 +386,13 @@ function Heimdall() {
 
           <header className="viewer-top">
             <h1 className="brand">
-              <img className="logo" src="/favicon.svg" alt="" /> Heimdall
+              <img className="logo" src="/favicon.svg" alt="" /> <span className="brand-name">Heimdall</span>
             </h1>
             <button
               className={`status-chip ${deviceTone}`}
               onClick={() => device === 'downloadable' && ensureWarm()}
               aria-label={`AI: ${DEVICE_COPY[device]}. Privacy: ${privacy}.${device === 'downloadable' ? ' Tap to download on-device AI.' : ''}`}
             >
-              <Icon name={device === 'available' ? 'chip' : 'cloud'} size={16} />
               {DEVICE_COPY[device]}
               {device === 'downloading' && progress !== null && ` ${Math.round(progress * 100)}%`}
             </button>
@@ -420,7 +419,7 @@ function Heimdall() {
             </button>
             {frozen && !busy && !listening && (
               <button className="glass-btn labeled" onClick={backToCamera}>
-                <Icon name="back" size={20} /> Live camera
+                <Icon name="back" size={20} /> Camera
               </button>
             )}
             <details className="samples" ref={samplesMenu}>
@@ -444,6 +443,7 @@ function Heimdall() {
             <button
               key={m.id}
               role="radio"
+              data-mode={m.id}
               aria-checked={mode === m.id}
               className={mode === m.id ? 'on' : ''}
               onClick={() => {

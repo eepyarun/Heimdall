@@ -1,8 +1,9 @@
 const PATHS = {
   describe: (
     <>
-      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
-      <circle cx="12" cy="12" r="3" />
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="16" cy="9" r="1.8" />
+      <path d="M3 17l5-6 4 4.5 2.5-2.5L21 19" />
     </>
   ),
   read: (
@@ -13,8 +14,8 @@ const PATHS = {
   ),
   identify: (
     <>
-      <path d="M10.5 20.5a5 5 0 0 1-7-7l10-10a5 5 0 0 1 7 7z" />
-      <path d="M8.5 8.5l7 7" />
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="M15.5 15.5L21 21" />
     </>
   ),
   translate: (
@@ -38,9 +39,8 @@ const PATHS = {
   ),
   photo: (
     <>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <circle cx="8.5" cy="9.5" r="1.5" />
-      <path d="M21 16l-5-5-9 9" />
+      <rect x="7" y="3" width="14" height="14" rx="2" />
+      <path d="M17 21H5a2 2 0 0 1-2-2V7M7 14l4-4 3 3 2-2 5 5" />
     </>
   ),
   sample: <path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />,

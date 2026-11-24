@@ -69,9 +69,9 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import java.util.Locale
 
-private val Yellow = Color(0xFFFFD23F)
-private val Bg = Color(0xFF0B0D12)
-private val Panel = Color(0xFF161A22)
+private val Yellow = Color(0xFFFBBC04)
+private val Bg = Color(0xFF121315)
+private val Panel = Color(0xFF202124)
 
 class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null

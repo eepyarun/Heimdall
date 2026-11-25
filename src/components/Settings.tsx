@@ -5,7 +5,7 @@ import { getVoice, onVoicesChanged, setVoice, speak, voicesFor } from '../lib/sp
 import { config } from '../lib/config';
 
 const PRIVACY: { id: Privacy; title: string; body: string }[] = [
-  { id: 'private', title: 'Private', body: 'Photos never leave this device. Needs on-device AI.' },
+  { id: 'private', title: 'Private', body: 'On-device only and offline. Photos never leave this device. Needs on-device AI.' },
   { id: 'smart', title: 'Smart (recommended)', body: 'On this device first. If it is unsure, or it is a medicine it can’t read clearly, it double-checks in the cloud.' },
   { id: 'quality', title: 'Best quality', body: 'Cloud first for the most detail. Falls back to this device when offline.' },
 ];
@@ -153,10 +153,10 @@ export function Settings(p: Props) {
           <p>
             <strong>Heimdall 1.0</strong>
             <br />
-            Eyes for everyone. Built with Firebase AI Logic: Gemini Nano on your device, and Gemini in the cloud only when it helps.
+            Eyes for everyone: blind and low-vision people, older adults, and anyone who wants help from the camera without sending every photo to the cloud first.
           </p>
           <p className="muted">
-            Photos are never stored. “My things” saves only text, in a private space for this device. Every answer shows how it was made.
+            Built with Firebase AI Logic: Gemini Nano on your device, and Gemini in the cloud only when you allow it. Private mode stays on-device and offline. Photos are never stored. “My things” saves only text. Every answer shows how it was made.
           </p>
         </div>
       </div>

@@ -599,7 +599,7 @@ function Heimdall() {
               </li>
             </ol>
             <p className="welcome-note">
-              <Icon name="shield" size={22} /> Runs on this device when it can. The cloud only helps when needed, and Private mode never uses it.
+              <Icon name="shield" size={22} /> Privacy first: runs on this device when it can. The cloud only helps when you allow it. Private mode stays on-device and offline.
             </p>
           </section>
         )}

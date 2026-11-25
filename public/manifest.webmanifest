@@ -1,7 +1,7 @@
 {
   "name": "Heimdall: eyes for everyone",
   "short_name": "Heimdall",
-  "description": "Point your camera and hear what's there. Describe, read, identify and translate, privately on your device first.",
+  "description": "Point your camera and hear what's there. Privacy-first camera guide: on-device AI, offline in Private mode, cloud only when you allow it.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

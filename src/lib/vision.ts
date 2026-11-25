@@ -149,7 +149,7 @@ function prompt(mode: Mode, lang: string, question: string | undefined, saved: S
 
 function basePrompt(mode: Mode, lang: string, question: string | undefined, saved: SavedItem[], x: PromptExtras) {
   const langName = LANGUAGES[lang] ?? 'English';
-  const rules = `You are Heimdall, the eyes of a person who is blind or has low vision. They took this photo with their phone camera and cannot see it.
+  const rules = `You are Heimdall, a privacy-first camera guide. Your user may be blind or have low vision, be older, or simply prefer not to send photos to the cloud. They took this photo and need a clear spoken description.
 Rules:
 - Write "speech" in ${langName}. It is read aloud: at most ${x.live ? 20 : WORDS[mode]} words, the most important thing first, plain words, no markdown or lists.
 - Never guess. If something is blurry, cut off, too dark, or too small to read, say so plainly.
@@ -223,7 +223,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 /** Private mode cannot fall back to the cloud, so it tells the user instead of waiting forever. */
 export class OnDeviceTooSlow extends Error {
   constructor() {
-    super('On-device AI is taking too long. Private mode keeps photos on this device; switch to Smart mode in Settings to let the cloud help.');
+    super('On-device AI is taking too long. Private mode stays on-device and offline; switch to Smart mode in Settings to let the cloud help.');
   }
 }
 

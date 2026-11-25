@@ -19,7 +19,7 @@ export interface PolicyInput {
 
 export class PrivateModeUnavailable extends Error {
   constructor() {
-    super('Private mode needs on-device AI, and it is not available on this device. Switch to Smart mode to use the cloud.');
+    super('Private mode is on-device and offline only, and on-device AI is not available here. Switch to Smart mode to let the cloud help.');
   }
 }
 
@@ -28,7 +28,7 @@ export function chooseRoute(p: PolicyInput): Route {
     // The SDK sends ONLY_ON_DEVICE requests to the cloud when the browser has no
     // LanguageModel at all, so Private mode must refuse instead of calling it.
     if (!p.deviceReady) throw new PrivateModeUnavailable();
-    return { mode: 'only_on_device', why: 'Private mode: photos never leave this device' };
+    return { mode: 'only_on_device', why: 'Private mode: on-device only and offline; photos never leave this device' };
   }
   if (p.privacy === 'quality') {
     return { mode: 'prefer_in_cloud', why: 'Best-quality mode: cloud first, on-device if offline' };

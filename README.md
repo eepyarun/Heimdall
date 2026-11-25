@@ -1,27 +1,29 @@
 # Heimdall: eyes for everyone
 
-Point your camera and hear what's there. Heimdall helps blind and low-vision people **describe** their surroundings, **read** text, **identify** medicine, money and products, **translate** signs and menus, and **ask** follow-up questions, all by voice, with one big button.
+Point your camera and hear what's there. Heimdall is a **privacy-first** camera guide: **describe** a room, **read** a letter, **identify** medicine or products, **translate** a sign, or **ask** a question, all by voice, with one big button.
 
-It runs **on your device first** with Gemini Nano, and falls back to (or double-checks with) Gemini in the cloud through **Firebase AI Logic hybrid inference**.
+It is built for **anyone who wants help from the camera without sending every photo to the cloud first**: people who are blind or have low vision, older adults who want large buttons and spoken answers, and anyone who prefers on-device AI until they choose otherwise.
 
-> Built for [#BuildHybridAI 2026](https://firebasehybridaihackathon.devpost.com/). Platforms: **Web** (Chrome; installable as a PWA on iOS and Android, live at https://heimdall-50c68.web.app) and **native Android** (Kotlin, `android/`).
+It runs **on your device first** with Gemini Nano, and only falls back to (or double-checks with) Gemini in the cloud through **Firebase AI Logic hybrid inference** when you allow it.
+
+> Built for [#BuildHybridAI 2026](https://firebasehybridaihackathon.devpost.com/). Platforms: **Web** (Chrome; installable as a PWA on iOS and Android, live at https://heimdall-50c68.web.app) and **native Android** (Kotlin, `android/`). Source: https://github.com/eepyarun/Heimdall
 
 ## Why hybrid matters here
 
-People who are blind point their camera at the most private things in their lives: prescription bottles, bank letters, mail, their own home. Today's assistants upload every photo to the cloud. On-device AI is private, free and works offline, but it is small, and **a confidently wrong answer about a medicine is dangerous**.
+Camera AI sees the most private things in people's lives: prescription bottles, bank letters, mail, the inside of a home. Most assistants upload every photo to a server. Many people, especially older adults and anyone careful about privacy, would rather keep that on the device. On-device AI is private, free and works **offline**, but it is small, and **a confidently wrong answer about a medicine is dangerous**.
 
-Heimdall treats the two models as one system with a safety policy:
+Heimdall treats the two models as one system with a privacy-and-safety policy:
 
 | Situation | What Heimdall does |
 | --- | --- |
-| Gemini Nano available, clear photo | Answers **on-device**. Nothing leaves the device. |
+| Gemini Nano available, clear photo | Answers **on-device**. Nothing leaves the device. Works offline. |
 | Nano is **unsure** (it rates its own confidence) | **Smart mode** re-asks a stronger cloud model and says "Double-checked". |
 | It's a **medicine** and Nano is only "fairly sure" | Stricter bar: double-checked in the cloud (threshold in Remote Config). |
 | Language Nano can't speak (e.g. Hindi, Arabic) | Routed to the cloud, and the reason is shown. |
 | Nano too slow (cold start) | After 30s, Heimdall says "Switching to cloud AI" and the cloud answers instead. |
 | Phone or browser without Nano (e.g. iPhone) | Same app; Firebase AI Logic falls back to the cloud automatically. |
-| **Private mode** | Only on-device. If there is no on-device model, Heimdall **refuses** rather than silently using the cloud (see below). |
-| Offline on a Nano laptop | Still works: app shell is cached by a service worker. |
+| **Private mode** | **On-device only and offline.** Photos and answers never use the cloud. If there is no on-device model, Heimdall **refuses** rather than silently uploading (see below). |
+| Offline with on-device AI | Still works: Private or Smart mode on the device, and the app shell is cached by a service worker. |
 | Cloud model overloaded or out of free-tier quota | Retries once, then walks a backup model list from Remote Config; the trail shows which model answered. |
 
 Every answer has a "How this answer was made" trail: which model answered, its confidence, latency and *why* it was routed there.
@@ -39,12 +41,14 @@ In the Web SDK, if the browser has **no `LanguageModel` API at all**, a model cr
 - **Remote Config**: cloud models, backup models, escalation thresholds (general and medicine), on-device languages, tunable without a release. Shared by web and Android.
 - **Hosting**: static PWA.
 
-## Accessibility
+## Accessibility and ease of use
+
+Designed so blind and low-vision users, older adults, and anyone who prefers listening over reading can use the same app.
 
 - **Warnings first.** Every answer has an `alerts` field: medicine warnings, allergens, expiry dates, danger signs, steps and traffic. Alerts are spoken before anything else ("Warning. May cause dizziness."), with an alarm tone, a long vibration and a red box.
 - One huge **Look** button, **Voice** to ask a question about what the camera sees, and **Live** to hear only what changes as you move.
 - Answers are spoken in sentence-sized chunks with the most natural voice on the device (choosable in Settings) and announced through an ARIA live region. Any tap interrupts speech; "One moment, analyzing" covers the wait.
-- Prompts are written for blind users: clock directions, distances in steps, never guess, and a camera **tip** ("Move closer", "Add more light") when the photo is poor.
+- Prompts use clock directions, distances in steps, plain language, never guess, and a camera **tip** ("Move closer", "Add more light") when the photo is poor.
 - WCAG AAA design: 7:1 text contrast in light and dark themes, flat surfaces, Atkinson Hyperlegible, 56px+ touch targets, support for system contrast, reduced motion and Windows high-contrast modes.
 - Each mode has its own colour **and** icon, and the selected one is also marked with a check and an underline, so colour is never the only signal. **Calm** (muted, default) and **Vivid** colour styles, because bright multi-colour screens can overwhelm some users.
 - Keyboard: **Space** look, **M** ask by voice, **L** live, **1–5** modes, **R** repeat, **Esc** stop.

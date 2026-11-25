@@ -106,6 +106,17 @@ Run it:
 
 `android/app/google-services.json` holds the public Firebase config for app `dev.heimdall.app`.
 
+## Testing status
+
+| Platform | Cloud AI | On-device AI |
+| --- | --- | --- |
+| Web, Chrome desktop (Windows) | Tested | Supported (Gemini Nano via Chrome's Prompt API) |
+| Web, Android and iPhone browsers | Tested | Not available: browsers on phones don't expose Gemini Nano yet, so Firebase AI Logic uses the cloud |
+| Native Android app | Code complete, not yet run on a device | Code complete (AICore), needs a Pixel 8 / Galaxy S24 or newer to test |
+| Native iOS app | Planned | Planned (Apple on-device models) |
+
+**To do:** test on-device AI on a supported Android phone, run the native Android app end to end, and build and test an iOS version. We didn't have access to a recent enough phone during the hackathon; the cloud path works on the phones we had.
+
 ## Tests
 
 ```bash

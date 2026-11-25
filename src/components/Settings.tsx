@@ -142,7 +142,7 @@ export function Settings(p: Props) {
           ))}
         </dl>
 
-        <h3>For judges and testers</h3>
+        <h3>For demo</h3>
         <label className="toggle">
           <input type="checkbox" checked={p.simulateNoDevice} onChange={(e) => p.onSimulate(e.target.checked)} />
           Simulate a device without on-device AI (shows the cloud fallback)

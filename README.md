@@ -74,7 +74,7 @@ npm run dev
 2. Enable `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` and restart.
 3. Open Heimdall and tap the status chip ("Tap to enable on-device AI"). The model downloads once.
 
-To show the cloud fallback on the same laptop: **Settings → For judges and testers → Simulate a device without on-device AI**.
+To show the cloud fallback on the same laptop: **Settings → For demo → Simulate a device without on-device AI**.
 
 No camera handy? **Samples** on the camera view loads fictional photos (a medicine bottle, a utility letter, a French menu).
 

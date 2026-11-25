@@ -15,6 +15,15 @@ const COLOR_STYLES: { id: ColorStyle; title: string; body: string }[] = [
   { id: 'vivid', title: 'Vivid', body: 'Full-strength colours for each mode. Easier to tell apart with low vision.' },
 ];
 
+const SHORTCUTS: [string, string][] = [
+  ['Space', 'Take a photo and look'],
+  ['M', 'Ask by voice'],
+  ['L', 'Start or stop Live'],
+  ['1–5', 'Choose a mode'],
+  ['R', 'Repeat the last answer'],
+  ['Esc', 'Stop speaking'],
+];
+
 interface Props {
   privacy: Privacy;
   lang: string;
@@ -61,7 +70,7 @@ export function Settings(p: Props) {
         </fieldset>
 
         <fieldset>
-          <legend>Colours</legend>
+          <legend>Mode colours</legend>
           {COLOR_STYLES.map((o) => (
             <label key={o.id} className={`radio-card ${p.colors === o.id ? 'on' : ''}`}>
               <input type="radio" name="colors" checked={p.colors === o.id} onChange={() => p.onColors(o.id)} />
@@ -73,6 +82,7 @@ export function Settings(p: Props) {
           ))}
         </fieldset>
 
+        <h3>Speech</h3>
         <label className="field">
           <span>Heimdall speaks</span>
           <select value={p.lang} onChange={(e) => p.onLang(e.target.value)}>
@@ -122,11 +132,33 @@ export function Settings(p: Props) {
           ))}
         </ul>
 
-        <h3>Demo</h3>
+        <h3>Keyboard shortcuts</h3>
+        <dl className="shortcuts">
+          {SHORTCUTS.map(([key, action]) => (
+            <div key={key}>
+              <dt><kbd>{key}</kbd></dt>
+              <dd>{action}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <h3>For judges and testers</h3>
         <label className="toggle">
           <input type="checkbox" checked={p.simulateNoDevice} onChange={(e) => p.onSimulate(e.target.checked)} />
           Simulate a device without on-device AI (shows the cloud fallback)
         </label>
+
+        <h3>About</h3>
+        <div className="about">
+          <p>
+            <strong>Heimdall 1.0</strong>
+            <br />
+            Eyes for everyone. Built with Firebase AI Logic: Gemini Nano on your device, and Gemini in the cloud only when it helps.
+          </p>
+          <p className="muted">
+            Photos are never stored. “My things” saves only text, in a private space for this device. Every answer shows how it was made.
+          </p>
+        </div>
       </div>
     </div>
   );

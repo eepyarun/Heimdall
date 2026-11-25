@@ -18,7 +18,7 @@ Heimdall treats the two models as one system with a safety policy:
 | Nano is **unsure** (it rates its own confidence) | **Smart mode** re-asks a stronger cloud model and says "Double-checked". |
 | It's a **medicine** and Nano is only "fairly sure" | Stricter bar: double-checked in the cloud (threshold in Remote Config). |
 | Language Nano can't speak (e.g. Hindi, Arabic) | Routed to the cloud, and the reason is shown. |
-| Nano too slow (cold start) | After 30s, the cloud answers instead. |
+| Nano too slow (cold start) | After 30s, Heimdall says "Switching to cloud AI" and the cloud answers instead. |
 | Phone or browser without Nano (e.g. iPhone) | Same app; Firebase AI Logic falls back to the cloud automatically. |
 | **Private mode** | Only on-device. If there is no on-device model, Heimdall **refuses** rather than silently using the cloud (see below). |
 | Offline on a Nano laptop | Still works: app shell is cached by a service worker. |
@@ -41,11 +41,13 @@ In the Web SDK, if the browser has **no `LanguageModel` API at all**, a model cr
 
 ## Accessibility
 
-- One huge **Look** button; **Space/Enter** to look, **1–5** to switch modes, **R** to repeat, **Esc** to stop speaking.
-- Answers are spoken (local speech synthesis, adjustable speed) and announced through an ARIA live region; speech can be turned off for screen-reader users.
-- Sound and vibration cues for "photo taken" and "answer ready".
-- Prompts are written for blind users: hazards first, clock directions, distances in steps, never guess, and a camera **tip** ("Move closer", "Add more light") when the photo is poor.
-- High-contrast dark theme, Atkinson Hyperlegible font, 48px+ touch targets, reduced-motion support.
+- **Warnings first.** Every answer has an `alerts` field: medicine warnings, allergens, expiry dates, danger signs, steps and traffic. Alerts are spoken before anything else ("Warning. May cause dizziness."), with an alarm tone, a long vibration and a red box.
+- One huge **Look** button, **Voice** to ask a question about what the camera sees, and **Live** to hear only what changes as you move.
+- Answers are spoken in sentence-sized chunks with the most natural voice on the device (choosable in Settings) and announced through an ARIA live region. Any tap interrupts speech; "One moment, analyzing" covers the wait.
+- Prompts are written for blind users: clock directions, distances in steps, never guess, and a camera **tip** ("Move closer", "Add more light") when the photo is poor.
+- WCAG AAA design: 7:1 text contrast in light and dark themes, flat surfaces, Atkinson Hyperlegible, 56px+ touch targets, support for system contrast, reduced motion and Windows high-contrast modes.
+- Each mode has its own colour **and** icon, and the selected one is also marked with a check and an underline, so colour is never the only signal. **Calm** (muted, default) and **Vivid** colour styles, because bright multi-colour screens can overwhelm some users.
+- Keyboard: **Space** look, **M** ask by voice, **L** live, **1–5** modes, **R** repeat, **Esc** stop.
 
 ## Run it locally
 
@@ -72,7 +74,9 @@ npm run dev
 2. Enable `chrome://flags/#prompt-api-for-gemini-nano-multimodal-input` and restart.
 3. Open Heimdall and tap the status chip ("Tap to enable on-device AI"). The model downloads once.
 
-To show the cloud fallback on the same laptop: **Settings → Demo → Simulate a device without on-device AI**.
+To show the cloud fallback on the same laptop: **Settings → For judges and testers → Simulate a device without on-device AI**.
+
+No camera handy? **Samples** on the camera view loads fictional photos (a medicine bottle, a utility letter, a French menu).
 
 ### Deploy
 

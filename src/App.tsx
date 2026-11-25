@@ -584,9 +584,25 @@ function Heimdall() {
           </details>
         )}
 
-        <p className="shortcuts muted">
-          Keys: Space look · M ask by voice · L live · 1–5 modes · R repeat · Esc stop
-        </p>
+        {!current && !busy && !error && !live && !listening && (
+          <section className="welcome" aria-labelledby="welcome-title">
+            <h2 id="welcome-title">Point your camera, hear what’s there</h2>
+            <ol>
+              <li>
+                <strong>Pick a mode.</strong> Describe a room, read a letter, identify a medicine, translate a sign, or ask anything.
+              </li>
+              <li>
+                <strong>Tap Look.</strong> Heimdall speaks the answer, and warnings always come first.
+              </li>
+              <li>
+                <strong>Tap Voice</strong> to ask a question, or <strong>Live</strong> to hear changes as you move.
+              </li>
+            </ol>
+            <p className="welcome-note">
+              <Icon name="shield" size={22} /> Runs on this device when it can. The cloud only helps when needed, and Private mode never uses it.
+            </p>
+          </section>
+        )}
       </main>
 
       {settingsOpen && (

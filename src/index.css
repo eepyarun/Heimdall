@@ -220,8 +220,17 @@ input:focus-visible, select:focus-visible { border-color: var(--primary); }
 .status-bar svg { flex-shrink: 0; color: var(--amber); }
 .status-bar.is-error { border-color: var(--danger); }
 .status-bar.is-error svg { color: var(--danger); }
-.shortcuts { font-size: 0.85rem; text-align: center; margin: 0.4rem 0 0; color: var(--muted); }
-@media (hover: none) { .shortcuts { display: none; } }
+.welcome { background: var(--surface); border: 2px solid var(--surface-2); border-radius: var(--radius); padding: 1.1rem 1.2rem; }
+.welcome h2 { font-size: 1.3rem; }
+.welcome ol { margin: 0 0 0.8rem; padding-left: 1.4rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.welcome-note { display: flex; gap: 0.6rem; align-items: flex-start; margin: 0; color: var(--muted); }
+.welcome-note svg { flex-shrink: 0; color: var(--teal); margin-top: 0.15rem; }
+
+.shortcuts { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.shortcuts div { display: flex; align-items: center; gap: 0.6rem; }
+.shortcuts dd { margin: 0; }
+kbd { display: inline-block; min-width: 2.6rem; text-align: center; font: inherit; font-weight: 700; font-size: 0.9rem; padding: 0.15rem 0.5rem; border: 2px solid var(--border); border-radius: 0.5rem; background: var(--surface); }
+.about p { margin-bottom: 0.5rem; }
 
 /* ---------- answer ---------- */
 
@@ -282,7 +291,7 @@ details summary { cursor: pointer; font-weight: 700; min-height: 3rem; display: 
 }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; }
 .sheet-head button { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
-.sheet h3 { margin-top: 0.4rem; }
+.sheet h3 { margin: 0.6rem 0 0; padding-top: 1rem; border-top: 2px solid var(--surface-2); font-size: 1.1rem; }
 fieldset { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem; }
 legend { font-weight: 700; margin-bottom: 0.4rem; }
 .radio-card { display: flex; gap: 0.75rem; align-items: flex-start; border: 2px solid var(--border); background: var(--surface); border-radius: 0.9rem; padding: 0.8rem; cursor: pointer; }

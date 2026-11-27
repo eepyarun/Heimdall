@@ -6,7 +6,12 @@ It is built for **anyone who wants help from the camera without sending every ph
 
 It runs **on your device first** with Gemini Nano, and only falls back to (or double-checks with) Gemini in the cloud through **Firebase AI Logic hybrid inference** when you allow it.
 
-> Built for [#BuildHybridAI 2026](https://firebasehybridaihackathon.devpost.com/). Platforms: **Web** (Chrome; installable as a PWA on iOS and Android, live at https://heimdall-50c68.web.app) and **native Android** (Kotlin, `android/`). Source: https://github.com/eepyarun/Heimdall
+> Built for [#BuildHybridAI 2026](https://firebasehybridaihackathon.devpost.com/). Platforms: **Web** (Chrome; installable as a PWA on iOS and Android, live at https://heimdall-50c68.web.app) and **Android app** (Kotlin + the web UI, `android/`). Source: https://github.com/eepyarun/Heimdall
+
+## Try it
+
+- **Web:** open https://heimdall-50c68.web.app in Chrome (desktop Chrome can run Gemini Nano on-device).
+- **Android:** [**Download Heimdall.apk**](https://github.com/eepyarun/Heimdall/releases/latest/download/Heimdall.apk) (Android 8.0+). Open the file on your phone and allow "Install unknown apps" when asked. On phones with Gemini Nano in AICore (for example Pixel 8 and newer, Galaxy S24 and newer) answers can run on-device; on other phones they come from the cloud. All releases: [Releases](https://github.com/eepyarun/Heimdall/releases).
 
 ## Why hybrid matters here
 
@@ -20,7 +25,7 @@ Heimdall treats the two models as one system with a privacy-and-safety policy:
 | Nano is **unsure** (it rates its own confidence) | **Smart mode** re-asks a stronger cloud model and says "Double-checked". |
 | It's a **medicine** and Nano is only "fairly sure" | Stricter bar: double-checked in the cloud (threshold in Remote Config). |
 | Language Nano can't speak (e.g. Hindi, Arabic) | Routed to the cloud, and the reason is shown. |
-| Nano too slow (cold start) | After 30s, Heimdall says "Switching to cloud AI" and the cloud answers instead. |
+| Nano slow or can't answer | After 8 seconds (or on an error) Heimdall **asks** whether to switch to cloud AI for this photo: a pop-up with **Use cloud AI / Keep waiting**, spoken aloud too. If the question was asked by voice, it listens for "yes" or "no". In Smart mode, if nobody answers, it still switches after 30 seconds. In Private mode, it asks for consent to send that one photo. |
 | Phone or browser without Nano (e.g. iPhone) | Same app; Firebase AI Logic falls back to the cloud automatically. |
 | **Private mode** | **On-device only and offline.** Photos and answers never use the cloud. If there is no on-device model, Heimdall **refuses** rather than silently uploading (see below). |
 | Offline with on-device AI | Still works: Private or Smart mode on the device, and the app shell is cached by a service worker. |
@@ -47,6 +52,8 @@ Designed so blind and low-vision users, older adults, and anyone who prefers lis
 
 - **Warnings first.** Every answer has an `alerts` field: medicine warnings, allergens, expiry dates, danger signs, steps and traffic. Alerts are spoken before anything else ("Warning. May cause dizziness."), with an alarm tone, a long vibration and a red box.
 - One huge **Look** button, **Voice** to ask a question about what the camera sees, and **Live** to hear only what changes as you move.
+- **Private / Smart / Best quality** is always visible under the top bar, so you never have to dig into Settings to choose between on-device and cloud AI.
+- **Follow-up questions** about the same photo by voice or by typing (the box under each answer).
 - Answers are spoken in sentence-sized chunks with the most natural voice on the device (choosable in Settings) and announced through an ARIA live region. Any tap interrupts speech; "One moment, analyzing" covers the wait.
 - Prompts use clock directions, distances in steps, plain language, never guess, and a camera **tip** ("Move closer", "Add more light") when the photo is poor.
 - WCAG AAA design: 7:1 text contrast in light and dark themes, flat surfaces, Atkinson Hyperlegible, 56px+ touch targets, support for system contrast, reduced motion and Windows high-contrast modes.
@@ -95,18 +102,23 @@ On iPhone/iPad: open the hosted URL in Safari → Share → **Add to Home Screen
 
 ## Android app
 
-`android/` is a native Kotlin + Jetpack Compose app with the same five modes, prompts, JSON schemas and routing policy (`Policy.kt` mirrors `src/lib/policy.ts`).
+The Android app (`android/`) shows **the same UI as the web app**, with every feature (five modes, Live, Voice, warnings first, Calm/Vivid, Samples, My things, Settings), and does the AI natively:
 
-- **Hybrid inference**: `firebase-ai` + `firebase-ai-ondevice`, `OnDeviceConfig(mode = InferenceMode.PREFER_ON_DEVICE)`. Gemini Nano runs through Android AICore (ML Kit Prompt API) on supported phones (for example Pixel 10 and Galaxy S25 series); `onDeviceExtension.checkStatus()/download()/warmUp()` manage the model, and `response.inferenceSource` drives the answer trail.
-- **Camera**: CameraX, plus a photo picker for emulator demos.
-- **App Check**: debug provider in debug builds, Play Integrity in release. **Remote Config**: same keys as the web.
-- The Android emulator has no AICore, so it demonstrates the cloud path; Private mode correctly refuses there.
+- **UI**: the web build is bundled into the APK (`npm run build:android` → `android/app/src/main/assets/web`) and served by `WebViewAssetLoader` under the web app's own origin, so it works offline and Firebase domain rules match. Nothing is downloaded from a server at start-up.
+- **Hybrid inference, native**: a WebView has no on-device model, so `src/lib/vision.ts` sends each model call over a JavaScript bridge (`src/lib/native.ts` ↔ `Bridge.kt`) to the **Android Firebase AI Logic SDK** (`firebase-ai` + `firebase-ai-ondevice`, `NativeAI.kt`). The same `InferenceMode` the web policy picks is passed to `OnDeviceConfig`, so on phones with Gemini Nano in AICore (ML Kit Prompt API) answers run on-device, and everywhere else they come from the cloud. `onDeviceExtension.checkStatus()/download()/warmUp()` drive the status chip, and `response.inferenceSource` drives the answer trail. The routing policy, timeouts and escalation stay in one place (`policy.ts`/`vision.ts`) for both platforms.
+- **App Check**: native Play Integrity in release builds, debug provider in debug builds; the web UI gets its App Check tokens from the native SDK.
+- **Speech**: Android's WebView has no Web Speech API, so speaking, the voice list, voice questions and vibration use Android's `TextToSpeech`, `SpeechRecognizer` and `Vibrator` through the bridge.
+- **Camera**: `getUserMedia` in the WebView (camera permission granted natively), plus the system photo picker.
 
-Run it:
+Build it yourself:
 
-1. Install [Android Studio](https://developer.android.com/studio) and open the `android/` folder. Let it sync Gradle.
-2. Create an emulator (Device Manager → Pixel, latest API). In its advanced settings set **Back camera → Webcam0** to use your laptop camera.
-3. Run the app, open **Logcat**, search `DebugAppCheckProvider`, and register that token in Firebase console → App Check → Apps → Heimdall Android → Manage debug tokens.
+```bash
+npm run build:android          # needs .env.local; bundles the web UI into the app
+cd android
+./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
+```
+
+Use JDK 17 or 21 (Android Studio: Settings → Build Tools → Gradle → Gradle JDK). For a debug build, run the app once, search Logcat for `DebugAppCheckProvider`, and register that token under Firebase console → App Check → Apps → Heimdall Android → Manage debug tokens. Release builds are signed with a key in `android/keystore.properties` (gitignored).
 
 `android/app/google-services.json` holds the public Firebase config for app `dev.heimdall.app`.
 
@@ -116,16 +128,15 @@ Run it:
 | --- | --- | --- |
 | Web, Chrome desktop (Windows) | Tested | Supported (Gemini Nano via Chrome's Prompt API) |
 | Web, Android and iPhone browsers | Tested | Not available: browsers on phones don't expose Gemini Nano yet, so Firebase AI Logic uses the cloud |
-| Native Android app | Code complete, not yet run on a device | Code complete (AICore), needs a Pixel 8 / Galaxy S24 or newer to test |
+| Android app (APK) | Tested on a Galaxy A53 (Android 14) | Code complete (AICore); the A53 has no Gemini Nano, so it needs a Pixel 8 / Galaxy S24 or newer to test |
 | Native iOS app | Planned | Planned (Apple on-device models) |
 
-**To do:** test on-device AI on a supported Android phone, run the native Android app end to end, and build and test an iOS version. We didn't have access to a recent enough phone during the hackathon; the cloud path works on the phones we had.
+**To do:** test on-device AI on a supported Android phone and build and test an iOS version. We didn't have access to a recent enough phone during the hackathon; the cloud path works on the phones we had.
 
 ## Tests
 
 ```bash
-npm test                                  # web: routing, escalation, model fallback
-cd android && ./gradlew testDebugUnitTest # Android: same policy rules
+npm test   # routing, escalation, model fallback (shared by web and Android)
 ```
 
 ## Project structure
@@ -136,14 +147,15 @@ src/lib/policy.ts    routing + escalation rules (pure, unit-tested)
 src/lib/device.ts    Gemini Nano availability checks
 src/lib/config.ts    Remote Config
 src/lib/items.ts     Firestore "My things"
-src/lib/speech.ts    speech synthesis / recognition, haptics
+src/lib/speech.ts    speech synthesis / recognition, haptics (native on Android)
+src/lib/native.ts    bridge to the Android app
 src/lib/samples.ts   fictional sample photos drawn on canvas
 src/components/      Camera, AnswerCard, Settings
 android/app/src/main/java/dev/heimdall/app/
-  Policy.kt          same routing rules as policy.ts (unit-tested)
-  Vision.kt          prompts, schemas, hybrid calls, Nano status/download
-  Config.kt          Remote Config
-  MainActivity.kt    CameraX + Compose screen, text-to-speech
+  MainActivity.kt    WebView shell: bundled web UI, camera + mic permissions, photo picker
+  Bridge.kt          window.HeimdallAndroid: AI calls, App Check tokens, speech, haptics
+  NativeAI.kt        Firebase AI Logic hybrid calls, Gemini Nano status/download/warm-up
+  HeimdallApp.kt     Firebase + App Check (Play Integrity / debug)
 ```
 
 ## License

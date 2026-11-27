@@ -1,5 +1,9 @@
 import { fetchAndActivate, getValue } from 'firebase/remote-config';
 import { firebase } from './firebase';
+import { isAndroidApp } from './native';
+
+/** ML Kit's Prompt API (Gemini Nano on Android) is only validated for English and Korean. */
+const ANDROID_ON_DEVICE_LANGUAGES = ['en', 'ko'];
 
 export interface AppConfig {
   /** Cloud fallback model for everyday requests. */
@@ -22,7 +26,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   backupModels: ['gemini-3.5-flash', 'gemini-3.5-flash-lite'],
   escalateAt: 'low',
   escalateMedicineAt: 'medium',
-  onDeviceLanguages: ['en', 'es', 'ja'],
+  onDeviceLanguages: isAndroidApp ? ANDROID_ON_DEVICE_LANGUAGES : ['en', 'es', 'ja'],
 };
 
 let current: AppConfig = DEFAULT_CONFIG;
@@ -60,7 +64,7 @@ export async function loadConfig(): Promise<AppConfig> {
     backupModels: list(getValue(remoteConfig, 'backup_models').asString()),
     escalateAt: level(getValue(remoteConfig, 'escalate_at').asString(), DEFAULT_CONFIG.escalateAt),
     escalateMedicineAt: level(getValue(remoteConfig, 'escalate_medicine_at').asString(), DEFAULT_CONFIG.escalateMedicineAt),
-    onDeviceLanguages: list(getValue(remoteConfig, 'on_device_languages').asString()),
+    onDeviceLanguages: isAndroidApp ? ANDROID_ON_DEVICE_LANGUAGES : list(getValue(remoteConfig, 'on_device_languages').asString()),
   };
   return current;
 }

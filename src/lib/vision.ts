@@ -2,6 +2,7 @@ import { getGenerativeModel, type GenerativeModel, type Part } from 'firebase/ai
 import { firebase } from './firebase';
 import { config } from './config';
 import { canRunPrivately, isDeviceDisabled, onDeviceOptions } from './device';
+import { call, native, onNativeEvent } from './native';
 import { chooseRoute, cleanAlerts, isBusyError, modelChain, normalizeConfidence, shouldEscalate, type RouteMode } from './policy';
 import type { Answer, Attempt, Engine, Mode, Privacy, SavedItem, VisionResult } from '../types';
 
@@ -51,6 +52,17 @@ function model(mode: RouteMode, lang: string, schema: Record<string, unknown>, c
 
 /** Start the Gemini Nano download and load it into memory so the first real request is fast. Call from a user gesture. */
 export async function warmUp(onProgress?: (p: number) => void) {
+  if (native) {
+    const off = onNativeEvent('deviceProgress', (p) => onProgress?.(Number(p)));
+    try {
+      await call((id) => native!.prepareDevice(id));
+    } catch (e) {
+      console.warn('On-device warm-up skipped', e);
+    } finally {
+      off();
+    }
+    return;
+  }
   const m = getGenerativeModel(firebase().ai, { mode: 'prefer_on_device', onDeviceParams: { createOptions: onDeviceOptions('en') as never } });
   try {
     await m.initializeDeviceModel(onProgress);
@@ -230,10 +242,39 @@ export class OnDeviceTooSlow extends Error {
 const ON_DEVICE_TIMEOUT_MS = 30_000;
 const PRIVATE_TIMEOUT_MS = 60_000;
 const LIVE_ON_DEVICE_TIMEOUT_MS = 12_000;
+/** After this long without an on-device answer, offer to switch to cloud AI. */
+const ASK_CLOUD_AFTER_MS = 8_000;
 /** Per cloud model; a stalled model is treated like a busy one and the next backup is tried. */
 const CLOUD_TIMEOUT_MS = 40_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+interface Generated {
+  text: string;
+  engine: Engine;
+}
+
+/**
+ * One model call. In the Android app it goes through the native Firebase AI Logic SDK, which runs
+ * Gemini Nano on-device through AICore where the phone supports it (a WebView has no on-device model).
+ */
+async function generate(route: RouteMode, lang: string, schema: Record<string, unknown>, cloudModel: string, text: string, image: Part): Promise<Generated> {
+  if (native) {
+    const img = (image as { inlineData: { data: string; mimeType: string } }).inlineData;
+    const request = JSON.stringify({
+      route: isDeviceDisabled() ? 'only_in_cloud' : route,
+      model: cloudModel,
+      prompt: text,
+      image: img.data,
+      mimeType: img.mimeType,
+      schema,
+    });
+    const r = await call<{ text: string; source: string }>((id) => native!.generate(id, request));
+    return { text: r.text, engine: r.source === 'on_device' ? 'on_device' : 'in_cloud' };
+  }
+  const res = await model(route, lang, schema, cloudModel).generateContent([text, image]);
+  return { text: res.response.text(), engine: res.response.inferenceSource === 'on_device' ? 'on_device' : 'in_cloud' };
+}
 
 async function attempt(
   mode: Mode,
@@ -249,13 +290,12 @@ async function attempt(
   const cfg = config();
   const tries = modelChain(cloudModel, [cfg.verifyModel, ...cfg.backupModels, cfg.cloudModel]);
   const t0 = performance.now();
-  let res: Awaited<ReturnType<GenerativeModel['generateContent']>> | undefined;
+  let res: Generated | undefined;
   let used = cloudModel;
   for (let i = 0; i < tries.length; i++) {
     used = tries[i];
-    const call = model(route, lang, SCHEMAS[mode], used).generateContent([text, image]);
     try {
-      res = await withTimeout(call, timeoutMs);
+      res = await withTimeout(generate(route, lang, SCHEMAS[mode], used, text, image), timeoutMs);
       break;
     } catch (e) {
       const retry = isBusyError(e) || (cloudOnly && e instanceof TimeoutError);
@@ -265,8 +305,7 @@ async function attempt(
     }
   }
   if (!res) throw new Error('No answer');
-  const engine: Engine = res.response.inferenceSource === 'on_device' ? 'on_device' : 'in_cloud';
-  const raw = res.response.text();
+  const { engine, text: raw } = res;
   let result: VisionResult;
   try {
     result = parse(raw);
@@ -288,6 +327,11 @@ export interface SeeOptions {
   context?: string;
   /** Spoken progress while waiting, e.g. when Heimdall switches from on-device to cloud. */
   onProgress?: (message: string) => void;
+  /**
+   * Asks the person whether to use cloud AI because on-device AI is slow or failed. Resolves true to switch.
+   * The signal aborts if on-device AI answers first, so the question can be withdrawn.
+   */
+  askSwitchToCloud?: (why: 'slow' | 'failed', signal: AbortSignal) => Promise<boolean>;
 }
 
 export async function see(o: SeeOptions): Promise<Answer> {
@@ -317,9 +361,28 @@ export async function see(o: SeeOptions): Promise<Answer> {
   const busyNote = () => o.onProgress?.('The cloud is busy. Trying another model.');
 
   let first: Awaited<ReturnType<typeof attempt>> | null = null;
+  const cloudModel = o.privacy === 'quality' ? cfg.verifyModel : cfg.cloudModel;
+  // Speed: when on-device AI is slow or fails, the person decides whether to use the cloud instead of waiting.
+  const askable = !!o.askSwitchToCloud && !o.live && (onDeviceFirst || route.mode === 'only_on_device');
+  const firstCall = attempt(o.mode, route.mode, o.lang, cloudModel, text, o.image, timeout, busyNote);
+  firstCall.catch(() => undefined);
+  if (askable) {
+    const outcome = await Promise.race([firstCall.then(() => 'done' as const, () => 'failed' as const), sleep(ASK_CLOUD_AFTER_MS).then(() => 'slow' as const)]);
+    if (outcome !== 'done') {
+      const ctrl = new AbortController();
+      const chose = await Promise.race([o.askSwitchToCloud!(outcome, ctrl.signal), firstCall.then(() => false, () => new Promise<boolean>(() => undefined))]);
+      ctrl.abort();
+      if (chose) {
+        o.onProgress?.('Switching to cloud AI.');
+        const c = await attempt(o.mode, 'only_in_cloud', o.lang, cloudModel, text, o.image, CLOUD_TIMEOUT_MS, busyNote);
+        attempts.push({ engine: 'on_device', model: 'Gemini Nano', ms: c.ms, reason: outcome === 'slow' ? 'On-device AI was slow, so you chose cloud AI' : 'On-device AI could not answer, so you chose cloud AI' });
+        attempts.push({ engine: 'in_cloud', model: c.model, confidence: c.result.confidence, ms: c.ms, reason: 'You asked for cloud AI for this photo' });
+        return answer(o, c.result, attempts, false);
+      }
+    }
+  }
   try {
-    const cloudModel = o.privacy === 'quality' ? cfg.verifyModel : cfg.cloudModel;
-    first = await attempt(o.mode, route.mode, o.lang, cloudModel, text, o.image, timeout, busyNote);
+    first = await firstCall;
   } catch (e) {
     if (!(e instanceof TimeoutError)) throw e;
     // A slow live frame is simply skipped; the next frame will be newer anyway.

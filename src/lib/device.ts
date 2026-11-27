@@ -1,3 +1,5 @@
+import { call, native } from './native';
+
 export type DeviceState = 'checking' | 'unsupported' | 'unavailable' | 'downloadable' | 'downloading' | 'available' | 'disabled';
 
 interface LanguageModelStatic {
@@ -29,6 +31,14 @@ export function onDeviceOptions(outputLang = 'en') {
 
 export async function checkDevice(outputLang = 'en'): Promise<DeviceState> {
   if (isDeviceDisabled()) return 'disabled';
+  // Android app: Gemini Nano through AICore, checked by the native Firebase AI Logic SDK.
+  if (native) {
+    try {
+      return await call<DeviceState>((id) => native!.deviceStatus(id));
+    } catch {
+      return 'unavailable';
+    }
+  }
   const lm = getLanguageModel();
   if (!lm) return 'unsupported';
   try {

@@ -76,6 +76,7 @@ function Heimdall() {
   const [live, setLive] = useState(false);
   const [caption, setCaption] = useState('');
   const [items, setItems] = useState<SavedItem[]>([]);
+  const [cloudAsk, setCloudAsk] = useState<{ message: string; why: 'slow' | 'failed'; answer: (yes: boolean) => void } | null>(null);
 
   const cam = useRef<CameraHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -149,7 +150,40 @@ function Heimdall() {
     say(spokenAnswer(r, lang, prefix));
   };
 
-  const run = async (img: Part, m: Mode, q?: string, context?: string) => {
+  /** On-device AI is slow or failed: ask (by pop-up, and out loud plus listening when the question was spoken) whether to use the cloud. */
+  const askSwitchToCloud = (byVoice: boolean) => (why: 'slow' | 'failed', signal: AbortSignal) =>
+    new Promise<boolean>((resolve) => {
+      let finished = false;
+      let stop: (() => void) | null = null;
+      const finish = (yes: boolean) => {
+        if (finished) return;
+        finished = true;
+        stop?.();
+        setCloudAsk(null);
+        resolve(yes);
+      };
+      signal.addEventListener('abort', () => finish(false));
+      const problem = why === 'slow' ? 'On-device AI is taking a while.' : 'On-device AI could not answer.';
+      const question = privacy === 'private' ? 'Private mode keeps photos on this device. Send this one photo to cloud AI?' : 'Switch to cloud AI for this photo?';
+      setCloudAsk({ message: `${problem} ${question}`, why, answer: finish });
+      tone('listen');
+      buzz([40, 60, 40]);
+      speak(`${problem} ${question}${byVoice ? ' Say yes or no.' : ''}`, speechLang);
+      if (!byVoice || !canListen()) return;
+      // Wait for the question to finish, then listen for the answer.
+      (async () => {
+        await sleep(400);
+        while (!finished && isSpeaking()) await sleep(200);
+        if (finished) return;
+        const l = listen(speechLang);
+        stop = l.stop;
+        const heard = (await l.result.catch(() => '')).toLowerCase();
+        if (/(yes|yeah|yep|sure|ok|okay|cloud|switch|go ahead)/.test(heard)) finish(true);
+        else if (/(no|nope|wait|keep|don't|do not)/.test(heard)) finish(false);
+      })();
+    });
+
+  const run = async (img: Part, m: Mode, q?: string, context?: string, byVoice = false) => {
     setBusyBoth(true);
     setError('');
     setImage(img);
@@ -163,7 +197,7 @@ function Heimdall() {
     };
     // Silence while waiting feels like a crash to someone who can't see the spinner.
     const reassure = setInterval(() => Date.now() - lastNote >= 12_000 && note('Still working, one moment.'), 3_000);
-    const opts: SeeOptions = { mode: m, image: img, privacy, lang, question: q, saved: items, context, onProgress: note };
+    const opts: SeeOptions = { mode: m, image: img, privacy, lang, question: q, saved: items, context, onProgress: note, askSwitchToCloud: askSwitchToCloud(byVoice) };
     lastOpts.current = opts;
     try {
       const a = await see(opts);
@@ -325,7 +359,7 @@ function Heimdall() {
       const q = (await l.result).trim();
       if (q) {
         setCaption(`“${q}”`);
-        await run(img, 'ask', q, contextFor(img));
+        await run(img, 'ask', q, contextFor(img), true);
       } else {
         say('I did not hear a question. Tap the microphone and try again.');
       }
@@ -336,6 +370,14 @@ function Heimdall() {
       stopListen.current = null;
       setCaption('');
     }
+  };
+
+  /** Typed follow-up from the answer card: same photo, with the last answer as context. */
+  const askByText = (q: string) => {
+    if (busy || !image) return;
+    stopLive(false);
+    stopSpeaking();
+    run(image, 'ask', q, contextFor(image));
   };
 
   const analyzePart = (part: Part, m: Mode) => {
@@ -432,6 +474,26 @@ function Heimdall() {
           <Icon name="settings" />
         </button>
       </header>
+
+      <div className="ai-toggle" role="radiogroup" aria-label="Privacy">
+        {([
+          { id: 'private', label: 'Private', icon: 'chip', spoken: 'Private. On-device only and offline. Photos stay on this phone.' },
+          { id: 'smart', label: 'Smart', icon: 'shield', spoken: 'Smart. On-device first, cloud double-check when unsure.' },
+          { id: 'quality', label: 'Best quality', icon: 'cloud', spoken: 'Best quality. Cloud first.' },
+        ] as const).map((o) => (
+          <button
+            key={o.id}
+            role="radio"
+            aria-checked={privacy === o.id}
+            onClick={() => {
+              setPrivacy(o.id);
+              say(o.spoken);
+            }}
+          >
+            <Icon name={o.icon} size={18} /> {o.label}
+          </button>
+        ))}
+      </div>
 
       <main className="stage">
         <section className={`viewer ${live ? 'is-live' : ''} ${busy ? 'is-busy' : ''}`} aria-label="Camera">
@@ -568,7 +630,24 @@ function Heimdall() {
             onVerify={() => verify(current)}
             onSave={() => save(current)}
             onAsk={() => askByVoice()}
+            onAskText={askByText}
           />
+        )}
+
+        {cloudAsk && (
+          <div className="sheet-backdrop" role="alertdialog" aria-modal aria-labelledby="cloud-ask-title">
+            <div className="sheet">
+              <h2 id="cloud-ask-title">{cloudAsk.message}</h2>
+              <div className="answer-actions">
+                <button className="verify" onClick={() => cloudAsk.answer(true)} autoFocus>
+                  <Icon name="cloud" size={20} /> Use cloud AI
+                </button>
+                <button onClick={() => cloudAsk.answer(false)}>
+                  <Icon name="chip" size={20} /> {cloudAsk.why === 'slow' ? 'Keep waiting on this device' : 'No, stay on this device'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {answers.length > 1 && (

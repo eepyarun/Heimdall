@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Answer } from '../types';
 import { Icon } from './Icon';
 
@@ -14,10 +15,13 @@ interface Props {
   onVerify: () => void;
   onSave: () => void;
   onAsk: () => void;
+  /** Typed follow-up about the same photo. */
+  onAskText: (question: string) => void;
 }
 
-export function AnswerCard({ answer, canVerify, canSave, busy, onRepeat, onReadAll, onVerify, onSave, onAsk }: Props) {
+export function AnswerCard({ answer, canVerify, canSave, busy, onRepeat, onReadAll, onVerify, onSave, onAsk, onAskText }: Props) {
   const r = answer.result;
+  const [followUp, setFollowUp] = useState('');
   const last = answer.attempts[answer.attempts.length - 1];
   return (
     <section className="answer" aria-labelledby={`ans-${answer.id}`}>
@@ -122,6 +126,22 @@ export function AnswerCard({ answer, canVerify, canSave, busy, onRepeat, onReadA
           </button>
         )}
       </div>
+
+      {!answer.live && (
+        <form
+          className="ask-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const q = followUp.trim();
+            if (!q) return;
+            setFollowUp('');
+            onAskText(q);
+          }}
+        >
+          <input value={followUp} onChange={(e) => setFollowUp(e.target.value)} placeholder="Type a follow-up question" aria-label="Follow-up question" />
+          <button type="submit" disabled={busy || !followUp.trim()}>Send</button>
+        </form>
+      )}
 
       {!!answer.attempts.length && (
         <details className="trail">

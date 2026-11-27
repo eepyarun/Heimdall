@@ -1,4 +1,20 @@
-const synth = typeof window !== 'undefined' ? window.speechSynthesis : undefined;
+import { call, native, onNativeEvent } from './native';
+
+// Android's WebView has no Web Speech API, so the Android app speaks and listens through native services.
+const synth = typeof window !== 'undefined' && !native ? window.speechSynthesis : undefined;
+
+type Voice = Pick<SpeechSynthesisVoice, 'name' | 'lang' | 'voiceURI' | 'localService'>;
+
+function allVoices(): Voice[] {
+  if (native) {
+    try {
+      return JSON.parse(native.voices()) as Voice[];
+    } catch {
+      return [];
+    }
+  }
+  return synth?.getVoices() ?? [];
+}
 
 let rate = Number(localStorage.getItem('heimdall.rate') ?? '1');
 
@@ -29,7 +45,7 @@ export function setLocalVoicesOnly(v: boolean) {
 }
 
 /** Higher is more natural: neural/online voices (Edge, Windows), Siri enhanced/premium (iOS, macOS), then Google's Chrome voices. */
-function naturalness(v: SpeechSynthesisVoice) {
+function naturalness(v: Voice) {
   let s = 0;
   if (/natural|neural/i.test(v.name)) s += 6;
   if (/premium|enhanced|siri/i.test(v.name)) s += 5;
@@ -40,16 +56,15 @@ function naturalness(v: SpeechSynthesisVoice) {
 }
 
 /** Voices for a language, most natural first. */
-export function voicesFor(lang: string): SpeechSynthesisVoice[] {
-  if (!synth) return [];
+export function voicesFor(lang: string): Voice[] {
   const base = lang.slice(0, 2).toLowerCase();
-  return synth
-    .getVoices()
+  return allVoices()
     .filter((v) => v.lang.toLowerCase().replace('_', '-').startsWith(base) && (!localOnly || v.localService))
     .sort((a, b) => naturalness(b) - naturalness(a) + (b.lang === lang ? 1 : 0) - (a.lang === lang ? 1 : 0));
 }
 
 export function onVoicesChanged(cb: () => void) {
+  if (native) return onNativeEvent('voiceschanged', cb);
   synth?.addEventListener('voiceschanged', cb);
   return () => synth?.removeEventListener('voiceschanged', cb);
 }
@@ -73,23 +88,27 @@ function chunks(text: string) {
 
 /** Speech synthesis uses the platform's voices; any new speech cuts off whatever was playing. */
 export function speak(text: string, lang = 'en-US') {
-  if (!synth || !text) return;
-  synth.cancel();
+  if (!text) return;
   const voice = pickVoice(lang);
+  if (native) return native.speak(text, voice?.lang ?? lang, rate, voice?.voiceURI ?? '');
+  if (!synth) return;
+  synth.cancel();
   for (const part of chunks(text)) {
     const u = new SpeechSynthesisUtterance(part);
     u.lang = voice?.lang ?? lang;
     u.rate = rate;
-    if (voice) u.voice = voice;
+    if (voice) u.voice = voice as SpeechSynthesisVoice;
     synth.speak(u);
   }
 }
 
 export function stopSpeaking() {
+  if (native) return native.stopSpeaking();
   synth?.cancel();
 }
 
 export function isSpeaking() {
+  if (native) return native.isSpeaking();
   return !!synth?.speaking || !!synth?.pending;
 }
 
@@ -105,11 +124,16 @@ type Recognition = {
 };
 
 export function canListen() {
+  if (native) return true;
   return 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
 }
 
 /** Resolves with one spoken phrase. Uses the platform speech recognizer (Chrome and Safari). */
 export function listen(lang = 'en-US'): { result: Promise<string>; stop: () => void } {
+  if (native) {
+    const result = call<string>((id) => native!.listen(id, lang));
+    return { result, stop: () => native!.stopListening() };
+  }
   const Ctor = (window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition })
     .SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition: new () => Recognition }).webkitSpeechRecognition;
   const rec = new Ctor();
@@ -129,5 +153,6 @@ export function listen(lang = 'en-US'): { result: Promise<string>; stop: () => v
 }
 
 export function buzz(pattern: number | number[] = 30) {
-  navigator.vibrate?.(pattern);
+  if (native) native.vibrate(JSON.stringify(pattern));
+  else navigator.vibrate?.(pattern);
 }

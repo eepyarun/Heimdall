@@ -1,9 +1,10 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { initializeAppCheck, ReCaptchaEnterpriseProvider, ReCaptchaV3Provider } from 'firebase/app-check';
+import { CustomProvider, initializeAppCheck, ReCaptchaEnterpriseProvider, ReCaptchaV3Provider } from 'firebase/app-check';
 import { getAI, GoogleAIBackend, type AI } from 'firebase/ai';
 import { getAuth, signInAnonymously, onAuthStateChanged, type User } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, type Firestore } from 'firebase/firestore';
 import { getRemoteConfig, type RemoteConfig } from 'firebase/remote-config';
+import { call, native } from './native';
 
 const env = import.meta.env;
 
@@ -31,14 +32,18 @@ export function firebase() {
 
   // App Check must be initialized before any Firebase AI Logic call.
   const debugToken = env.VITE_APPCHECK_DEBUG_TOKEN;
-  if (debugToken) {
+  if (debugToken && !native) {
     (self as unknown as { FIREBASE_APPCHECK_DEBUG_TOKEN: string | boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN =
       debugToken === 'true' ? true : debugToken;
   }
   const siteKey = env.VITE_RECAPTCHA_SITE_KEY ?? 'debug-only';
   initializeAppCheck(app, {
-    provider:
-      env.VITE_RECAPTCHA_PROVIDER === 'v3' ? new ReCaptchaV3Provider(siteKey) : new ReCaptchaEnterpriseProvider(siteKey),
+    provider: native
+      ? // Android app: tokens come from the native App Check SDK (Play Integrity, or a registered debug token).
+        new CustomProvider({ getToken: () => call<{ token: string; expireTimeMillis: number }>((id) => native!.appCheckToken(id, false)) })
+      : env.VITE_RECAPTCHA_PROVIDER === 'v3'
+        ? new ReCaptchaV3Provider(siteKey)
+        : new ReCaptchaEnterpriseProvider(siteKey),
     isTokenAutoRefreshEnabled: true,
   });
 

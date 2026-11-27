@@ -24,3 +24,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Web build bundled into the Android app (npm run build:android)
+android/app/src/main/assets/web/
+
+# Android release signing (never commit)
+android/keystore.properties
+*.jks
+*.keystore

@@ -2,6 +2,7 @@
   "name": "heimdall",
   "private": true,
   "version": "1.0.0",
+  "author": "Arun Jose",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {

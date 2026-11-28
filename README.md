@@ -163,3 +163,7 @@ android/app/src/main/java/dev/heimdall/app/
 Apache 2.0. See [LICENSE](LICENSE).
 
 Heimdall describes what a camera sees and can make mistakes. Always confirm medicine details with a pharmacist.
+
+---
+
+Made with love, Arun :)

@@ -1,4 +1,4 @@
-# Heimdall: eyes for everyone
+# Heimdall: eyes for everyone 0_0
 
 Point your camera and hear what's there. Heimdall is a **privacy-first** camera guide: **describe** a room, **read** a letter, **identify** medicine or products, **translate** a sign, or **ask** a question, all by voice, with one big button.
 
@@ -162,8 +162,8 @@ android/app/src/main/java/dev/heimdall/app/
 
 Apache 2.0. See [LICENSE](LICENSE).
 
-Heimdall describes what a camera sees and can make mistakes. Always confirm medicine details with a pharmacist.
+Heimdall describes what a camera sees and can make mistakes. Always confirm important life threatening details with the respective authorities.....
 
 ---
 
-Made with love, Arun :)
+Made with love, arun :)

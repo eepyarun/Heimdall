@@ -35,6 +35,12 @@ const DEVICE_COPY: Record<DeviceState, string> = {
   disabled: 'Cloud AI (demo)',
 };
 
+const PRIVACY_OPTIONS = [
+  { id: 'private', label: 'Private', icon: 'chip', hint: 'On-device only, offline', spoken: 'Private. On-device only and offline. Photos stay on this phone.' },
+  { id: 'smart', label: 'Smart', icon: 'shield', hint: 'On-device first, cloud when unsure', spoken: 'Smart. On-device first, cloud double-check when unsure.' },
+  { id: 'quality', label: 'Best quality', icon: 'cloud', hint: 'Cloud first', spoken: 'Best quality. Cloud first.' },
+] as const;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function errorMessage(e: unknown): string {
@@ -65,6 +71,7 @@ function Heimdall() {
   const [simulate, setSimulate] = useState(isDeviceDisabled());
   const [colors, setColors] = useState<ColorStyle>(() => (localStorage.getItem('heimdall.colors') as ColorStyle) || 'calm');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
@@ -114,6 +121,13 @@ function Heimdall() {
     document.addEventListener('click', cut, true);
     return () => document.removeEventListener('click', cut, true);
   }, []);
+  useEffect(() => {
+    if (!privacyOpen) return;
+    // Tapping anywhere outside the privacy menu closes it.
+    const close = (e: PointerEvent) => !(e.target as HTMLElement).closest('.privacy-picker') && setPrivacyOpen(false);
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [privacyOpen]);
   useEffect(() => localStorage.setItem('heimdall.lang', lang), [lang]);
   useEffect(() => localStorage.setItem('heimdall.colors', colors), [colors]);
   useEffect(() => localStorage.setItem('heimdall.speak', speakAnswers ? '1' : '0'), [speakAnswers]);
@@ -461,39 +475,52 @@ function Heimdall() {
         <h1 className="brand">
           <img className="logo" src="/favicon.svg" alt="" /> <span className="brand-name">Heimdall</span>
         </h1>
-        <button
-          className={`status-chip ${deviceTone}`}
-          onClick={() => device === 'downloadable' && ensureWarm()}
-          aria-label={`AI: ${DEVICE_COPY[device]}. Privacy: ${privacy}.${device === 'downloadable' ? ' Tap to download on-device AI.' : ''}`}
-        >
-          <Icon name={device === 'available' ? 'chip' : device === 'downloadable' || device === 'downloading' ? 'download' : 'cloud'} size={20} />
-          {DEVICE_COPY[device]}
-          {device === 'downloading' && progress !== null && ` ${Math.round(progress * 100)}%`}
-        </button>
+        <div className="privacy-picker">
+          <button
+            className={`status-chip ${deviceTone}`}
+            onClick={() => setPrivacyOpen((v) => !v)}
+            aria-expanded={privacyOpen}
+            aria-label={`Privacy: ${PRIVACY_OPTIONS.find((o) => o.id === privacy)!.label}. AI: ${DEVICE_COPY[device]}. Tap to change.`}
+          >
+            <Icon name={PRIVACY_OPTIONS.find((o) => o.id === privacy)!.icon} size={20} />
+            {PRIVACY_OPTIONS.find((o) => o.id === privacy)!.label}
+            <span className="chip-engine">· {device === 'available' ? 'On-device' : device === 'downloading' ? `Downloading${progress !== null ? ` ${Math.round(progress * 100)}%` : ''}` : 'Cloud'}</span>
+          </button>
+          {privacyOpen && (
+            <div className="privacy-menu" role="radiogroup" aria-label="Privacy">
+              {PRIVACY_OPTIONS.map((o) => (
+                <button
+                  key={o.id}
+                  role="radio"
+                  aria-checked={privacy === o.id}
+                  onClick={() => {
+                    setPrivacy(o.id);
+                    setPrivacyOpen(false);
+                    say(o.spoken);
+                  }}
+                >
+                  <Icon name={o.icon} size={22} />
+                  <span>
+                    <strong>{o.label}</strong>
+                    <small>{o.hint}</small>
+                  </span>
+                </button>
+              ))}
+              <p className="privacy-status">
+                <Icon name={device === 'available' ? 'chip' : 'cloud'} size={18} /> This device: {DEVICE_COPY[device]}
+              </p>
+              {device === 'downloadable' && (
+                <button onClick={() => { ensureWarm(); setPrivacyOpen(false); }}>
+                  <Icon name="download" size={20} /> Download on-device AI
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Settings">
           <Icon name="settings" />
         </button>
       </header>
-
-      <div className="ai-toggle" role="radiogroup" aria-label="Privacy">
-        {([
-          { id: 'private', label: 'Private', icon: 'chip', spoken: 'Private. On-device only and offline. Photos stay on this phone.' },
-          { id: 'smart', label: 'Smart', icon: 'shield', spoken: 'Smart. On-device first, cloud double-check when unsure.' },
-          { id: 'quality', label: 'Best quality', icon: 'cloud', spoken: 'Best quality. Cloud first.' },
-        ] as const).map((o) => (
-          <button
-            key={o.id}
-            role="radio"
-            aria-checked={privacy === o.id}
-            onClick={() => {
-              setPrivacy(o.id);
-              say(o.spoken);
-            }}
-          >
-            <Icon name={o.icon} size={18} /> {o.label}
-          </button>
-        ))}
-      </div>
 
       <main className="stage">
         <section className={`viewer ${live ? 'is-live' : ''} ${busy ? 'is-busy' : ''}`} aria-label="Camera">

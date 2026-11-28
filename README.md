@@ -52,7 +52,7 @@ Designed so blind and low-vision users, older adults, and anyone who prefers lis
 
 - **Warnings first.** Every answer has an `alerts` field: medicine warnings, allergens, expiry dates, danger signs, steps and traffic. Alerts are spoken before anything else ("Warning. May cause dizziness."), with an alarm tone, a long vibration and a red box.
 - One huge **Look** button, **Voice** to ask a question about what the camera sees, and **Live** to hear only what changes as you move.
-- **Private / Smart / Best quality** is always visible under the top bar, so you never have to dig into Settings to choose between on-device and cloud AI.
+- **Private / Smart / Best quality** is one tap away: the chip in the top bar shows the current mode and engine ("Smart · Cloud") and opens the three choices, so you never have to dig into Settings to choose between on-device and cloud AI. Look, Live and Voice stay pinned to the bottom of the screen on phones.
 - **Follow-up questions** about the same photo by voice or by typing (the box under each answer).
 - Answers are spoken in sentence-sized chunks with the most natural voice on the device (choosable in Settings) and announced through an ARIA live region. Any tap interrupts speech; "One moment, analyzing" covers the wait.
 - Prompts use clock directions, distances in steps, plain language, never guess, and a camera **tip** ("Move closer", "Add more light") when the photo is poor.

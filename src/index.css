@@ -110,17 +110,18 @@ input:focus-visible, select:focus-visible { border-color: var(--primary); }
 }
 
 .topbar {
-  display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.75rem;
+  position: relative; display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.75rem;
   padding-top: max(0.6rem, env(safe-area-inset-top)); border-bottom: 2px solid var(--surface-2);
 }
 .brand { font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem; margin: 0 auto 0 0; min-width: 0; }
 .logo { width: 2rem; height: 2rem; border-radius: 0.5rem; }
 .icon-btn { padding: 0; flex-shrink: 0; }
 /* Privacy is always one tap away in the top bar: the chip shows the mode and engine, and opens Private / Smart / Best quality. */
-.privacy-picker { position: relative; flex-shrink: 0; }
+.privacy-picker { flex-shrink: 0; }
 .chip-engine { font-weight: 400; color: var(--muted); }
 .privacy-menu {
-  position: absolute; right: 0; top: calc(100% + 0.4rem); z-index: 15; width: min(19rem, calc(100vw - 1.5rem));
+  /* Anchored to the full top bar (not the chip) so it never runs off the edge of a phone screen. */
+  position: absolute; left: 0.75rem; right: 0.75rem; top: calc(100% + 0.4rem); z-index: 15; margin-left: auto; max-width: 22rem;
   background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.4rem;
 }
 .privacy-menu button { justify-content: flex-start; text-align: left; background: var(--bg); }

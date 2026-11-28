@@ -12,6 +12,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import com.google.firebase.Firebase
@@ -54,6 +55,7 @@ class Bridge(private val activity: MainActivity, private val web: WebView) {
             } catch (e: Throwable) {
                 // Keep the cause: the web app looks for words like "503", "quota" or "App Check" in it.
                 val cause = e.cause?.message?.let { " ($it)" } ?: ""
+                Log.w("Heimdall", "Bridge call failed", e)
                 reject(id, "${e::class.simpleName}: ${e.message}$cause")
             }
         }

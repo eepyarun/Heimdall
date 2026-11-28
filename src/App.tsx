@@ -216,6 +216,8 @@ function Heimdall() {
     try {
       const a = await see(opts);
       setAnswers((xs) => [a, ...xs.filter((x) => !x.live)].slice(0, 10));
+      // On phones the answer sits below the Look dock; bring it into view.
+      requestAnimationFrame(() => document.querySelector('.answer')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
       announce(a.result, a.escalated ? 'Double-checked. ' : '');
     } catch (e) {
       tone('error');
@@ -603,6 +605,18 @@ function Heimdall() {
           </form>
         )}
 
+        <div className="live" aria-live="polite" aria-atomic="true">
+          {error ? (
+            <p className="status-bar is-error" role="alert">
+              <Icon name="alert" size={22} /> {error}
+            </p>
+          ) : busy || live || listening ? (
+            <p className="status-bar is-alert">
+              <Icon name={listening ? 'mic' : live ? 'live' : 'describe'} size={22} /> {listening ? 'Listening…' : status}
+            </p>
+          ) : null}
+        </div>
+
         <div className="dock">
           <button
             className={`dock-btn ${live ? 'on' : ''}`}
@@ -632,18 +646,6 @@ function Heimdall() {
             <span className="dock-icon"><Icon name="mic" size={34} /></span>
             <span className="dock-label">{listening ? 'Listening' : 'Voice'}</span>
           </button>
-        </div>
-
-        <div className="live" aria-live="polite" aria-atomic="true">
-          {error ? (
-            <p className="status-bar is-error" role="alert">
-              <Icon name="alert" size={22} /> {error}
-            </p>
-          ) : busy || live || listening ? (
-            <p className="status-bar is-alert">
-              <Icon name={listening ? 'mic' : live ? 'live' : 'describe'} size={22} /> {listening ? 'Listening…' : status}
-            </p>
-          ) : null}
         </div>
 
         {current && (
